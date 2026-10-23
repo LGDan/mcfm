@@ -5,6 +5,7 @@ import {
   mdiChartBellCurveCumulative,
   mdiCheckDecagramOutline,
   mdiDownloadOutline,
+  mdiFileChartOutline,
   mdiFileDocumentPlusOutline,
   mdiFileTreeOutline,
   mdiFlaskOutline,
@@ -21,6 +22,7 @@ import {
   type CurrencyCode,
   type LayoutAlgorithm,
 } from '../types/model';
+import { downloadSimulationReport } from '../sim/reportGenerator';
 import { MdiIcon } from './MdiIcon';
 
 export function Toolbar() {
@@ -29,6 +31,8 @@ export function Toolbar() {
 
   const modelName = useModelStore((s) => s.modelName);
   const setModelName = useModelStore((s) => s.setModelName);
+  const nodes = useModelStore((s) => s.nodes);
+  const edges = useModelStore((s) => s.edges);
   const currency = useModelStore((s) => s.currency);
   const setCurrency = useModelStore((s) => s.setCurrency);
   const activeTab = useModelStore((s) => s.activeTab);
@@ -247,6 +251,28 @@ export function Toolbar() {
         >
           <MdiIcon path={mdiFlaskOutline} size={14} />
           <span>Demo</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-with-icon"
+          disabled={!simulationResult || !validation.valid}
+          onClick={() => {
+            if (!simulationResult) return;
+            downloadSimulationReport(
+              {
+                modelName,
+                currency,
+                nodes,
+                edges,
+                result: simulationResult,
+              },
+              'html'
+            );
+          }}
+          title="Download standalone HTML budget report"
+        >
+          <MdiIcon path={mdiFileChartOutline} size={14} />
+          <span>Report</span>
         </button>
         <button
           type="button"

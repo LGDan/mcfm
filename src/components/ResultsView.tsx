@@ -1,8 +1,24 @@
 import { useState } from 'react';
+import {
+  mdiDownloadOutline,
+  mdiFileDelimitedOutline,
+  mdiFileDocumentOutline,
+  mdiLanguageMarkdownOutline,
+  mdiPrinterOutline,
+  mdiRefresh,
+} from '@mdi/js';
 import { useModelStore } from '../store/modelStore';
 import { formatCurrency, type HistogramBin } from '../types/model';
+import {
+  downloadSimulationReport,
+  openPrintableReportWindow,
+} from '../sim/reportGenerator';
+import { MdiIcon } from './MdiIcon';
 
 export function ResultsView() {
+  const modelName = useModelStore((s) => s.modelName);
+  const nodes = useModelStore((s) => s.nodes);
+  const edges = useModelStore((s) => s.edges);
   const simulationResult = useModelStore((s) => s.simulationResult);
   const currency = useModelStore((s) => s.currency);
   const validation = useModelStore((s) => s.validation);
@@ -12,6 +28,7 @@ export function ResultsView() {
   const setActiveTab = useModelStore((s) => s.setActiveTab);
 
   const [hoveredBin, setHoveredBin] = useState<HistogramBin | null>(null);
+  const [reportMenuOpen, setReportMenuOpen] = useState(false);
 
   if (!validation.valid) {
     return (
@@ -92,11 +109,137 @@ export function ResultsView() {
 
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary btn-with-icon"
             onClick={() => runSimulation(false)}
           >
-            Re-run Simulation
+            <MdiIcon path={mdiRefresh} size={15} />
+            <span>Re-run Simulation</span>
           </button>
+
+          <div className="report-dropdown-wrap">
+            <button
+              type="button"
+              className="btn btn-secondary btn-with-icon"
+              onClick={() => setReportMenuOpen((v) => !v)}
+              title="Generate or download a formatted project budget report"
+            >
+              <MdiIcon path={mdiDownloadOutline} size={15} />
+              <span>Export Report ▾</span>
+            </button>
+
+            {reportMenuOpen && (
+              <div className="report-dropdown-menu" role="menu">
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    downloadSimulationReport(
+                      {
+                        modelName,
+                        currency,
+                        nodes,
+                        edges,
+                        result: simulationResult,
+                      },
+                      'html'
+                    );
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiFileDocumentOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Download HTML Report (.html)
+                    </div>
+                    <div className="report-menu-sub">
+                      Standalone interactive report with embedded SVG chart
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    openPrintableReportWindow({
+                      modelName,
+                      currency,
+                      nodes,
+                      edges,
+                      result: simulationResult,
+                    });
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiPrinterOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Open Printable / Save as PDF
+                    </div>
+                    <div className="report-menu-sub">
+                      Opens formatted actuarial dossier ready for Print to PDF
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    downloadSimulationReport(
+                      {
+                        modelName,
+                        currency,
+                        nodes,
+                        edges,
+                        result: simulationResult,
+                      },
+                      'markdown'
+                    );
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiLanguageMarkdownOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Download Markdown (.md)
+                    </div>
+                    <div className="report-menu-sub">
+                      Executive summary, percentiles, and tables for Confluence / GitHub
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    downloadSimulationReport(
+                      {
+                        modelName,
+                        currency,
+                        nodes,
+                        edges,
+                        result: simulationResult,
+                      },
+                      'csv'
+                    );
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiFileDelimitedOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Download Spreadsheet (.csv)
+                    </div>
+                    <div className="report-menu-sub">
+                      Percentiles, cost drivers, and histogram bins for Excel
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -375,21 +375,22 @@ function FlowCanvasInner() {
         proOptions={{ hideAttribution: true }}
       >
         <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1.2}
-          color="#334155"
+          variant={BackgroundVariant.Lines}
+          gap={28}
+          size={1}
+          color="#e4dfd4"
         />
         <Controls position="bottom-left" />
         <MiniMap
           position="bottom-right"
           pannable
           zoomable
+          maskColor="rgba(244, 241, 234, 0.72)"
           nodeColor={(node: ModelNode) => {
-            if (node.type === 'start') return '#10b981';
-            if (node.type === 'question') return '#6366f1';
-            if (node.type === 'outcome') return '#0ea5e9';
-            return '#64748b';
+            if (node.type === 'start') return '#1d5c4b';
+            if (node.type === 'question') return '#181715';
+            if (node.type === 'outcome') return '#224b7a';
+            return '#8c8578';
           }}
         />
       </ReactFlow>

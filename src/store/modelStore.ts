@@ -82,20 +82,20 @@ export function decorateEdge(
   }
 
   const strokeColor = isAnd
-    ? '#f59e0b'
+    ? '#a66a12'
     : isQuestionEnd
-      ? '#a78bfa'
+      ? '#4a463f'
       : isOr
-        ? '#38bdf8'
+        ? '#224b7a'
         : isEnd
-          ? '#64748b'
-          : '#94a3b8';
+          ? '#6e685f'
+          : '#181715';
 
   const strokeWidth = associatedOutcome
     ? computeProbabilityStrokeWidth(associatedOutcome.data.probabilityPct)
     : isAnd || isQuestionEnd
-      ? 3.5
-      : 2.5;
+      ? 2.75
+      : 2.25;
 
   const isZeroProb =
     associatedOutcome !== undefined &&
@@ -109,29 +109,46 @@ export function decorateEdge(
     animated: isAnd,
     label,
     labelStyle: isAnd
-      ? { fill: '#fbbf24', fontWeight: 700, fontSize: 11 }
+      ? {
+          fill: '#8f580a',
+          fontWeight: 600,
+          fontSize: 10.5,
+          fontFamily: "'IBM Plex Mono', monospace",
+          letterSpacing: '0.04em',
+        }
       : isQuestionEnd
-        ? { fill: '#c4b5fd', fontWeight: 700, fontSize: 10.5 }
-        : { fill: '#e2e8f0', fontWeight: 600, fontSize: 11 },
+        ? {
+            fill: '#181715',
+            fontWeight: 600,
+            fontSize: 10,
+            fontFamily: "'IBM Plex Mono', monospace",
+            letterSpacing: '0.04em',
+          }
+        : {
+            fill: '#181715',
+            fontWeight: 600,
+            fontSize: 10.5,
+            fontFamily: "'IBM Plex Mono', monospace",
+          },
     labelBgStyle: {
-      fill: '#0f172a',
-      fillOpacity: 0.9,
+      fill: '#faf8f4',
+      fillOpacity: 0.96,
       stroke: strokeColor,
       strokeWidth: 1,
     },
     labelBgPadding: [6, 3],
-    labelBgBorderRadius: 4,
+    labelBgBorderRadius: 2,
     style: {
       stroke: strokeColor,
       strokeWidth,
-      strokeOpacity: isZeroProb ? 0.35 : 0.95,
+      strokeOpacity: isZeroProb ? 0.3 : 0.9,
       strokeDasharray: isAnd ? '6 4' : isZeroProb ? '3 3' : undefined,
     },
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: strokeColor,
-      width: 14,
-      height: 14,
+      width: 13,
+      height: 13,
     },
     data: { kind },
   };

@@ -157,11 +157,9 @@ export function ResultsView() {
       <section className="chart-panel">
         <div className="chart-panel-header">
           <div>
-            <h2>Project Cost Distribution & Cumulative Probability</h2>
+            <h2>Cost Distribution &amp; Cumulative Probability</h2>
             <p className="chart-panel-sub">
-              Teal bars are within the P80 budget (
-              {formatCurrency(simulationResult.p80, currency)}); amber bars
-              represent tail risk above P80.
+              Prussian blue bars lie within the P80 budget ({formatCurrency(simulationResult.p80, currency)}); vermilion bars represent tail risk above P80.
             </p>
           </div>
           {hoveredBin && (
@@ -193,15 +191,16 @@ export function ResultsView() {
                     x2={865}
                     y1={y}
                     y2={y}
-                    stroke="#1e293b"
-                    strokeDasharray="4 4"
+                    stroke="#e2dcd1"
+                    strokeDasharray="3 3"
                   />
                   <text
                     x={48}
                     y={y + 4}
                     textAnchor="end"
                     fontSize="10"
-                    fill="#94a3b8"
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill="#6e685f"
                   >
                     {pctLabel}
                   </text>
@@ -210,7 +209,8 @@ export function ResultsView() {
                     y={y + 4}
                     textAnchor="start"
                     fontSize="10"
-                    fill="#64748b"
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill="#8c8578"
                   >
                     {cdfLabel}
                   </text>
@@ -224,10 +224,10 @@ export function ResultsView() {
               x2={865}
               y1={240 - 0.8 * 200}
               y2={240 - 0.8 * 200}
-              stroke="#10b981"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-              opacity={0.6}
+              stroke="#1d5c4b"
+              strokeWidth={1.2}
+              strokeDasharray="4 3"
+              opacity={0.75}
             />
 
             {/* Bars */}
@@ -243,10 +243,10 @@ export function ResultsView() {
                 bin.minCost > simulationResult.p80 && !bin.containsP80;
 
               const fill = bin.containsP80
-                ? '#10b981'
+                ? '#1d5c4b'
                 : isAboveP80
-                  ? '#f59e0b'
-                  : '#0ea5e9';
+                  ? '#c44528'
+                  : '#224b7a';
 
               return (
                 <g
@@ -260,9 +260,9 @@ export function ResultsView() {
                     y={y}
                     width={barWidth}
                     height={Math.max(2, barHeight)}
-                    rx={3}
+                    rx={1}
                     fill={fill}
-                    opacity={hoveredBin === bin ? 1 : 0.85}
+                    opacity={hoveredBin === bin ? 1 : 0.86}
                   />
                   {bin.containsP80 && (
                     <g>
@@ -271,26 +271,26 @@ export function ResultsView() {
                         x2={x + barWidth / 2}
                         y1={24}
                         y2={245}
-                        stroke="#10b981"
-                        strokeWidth={2}
+                        stroke="#1d5c4b"
+                        strokeWidth={1.75}
                         strokeDasharray="4 3"
                       />
                       <rect
-                        x={Math.min(790, Math.max(60, x + barWidth / 2 - 48))}
-                        y={8}
-                        width={96}
-                        height={20}
-                        rx={4}
-                        fill="#065f46"
-                        stroke="#10b981"
+                        x={Math.min(782, Math.max(60, x + barWidth / 2 - 54))}
+                        y={6}
+                        width={108}
+                        height={21}
+                        rx={2}
+                        fill="#1d5c4b"
                       />
                       <text
-                        x={Math.min(838, Math.max(108, x + barWidth / 2))}
-                        y={22}
+                        x={Math.min(836, Math.max(114, x + barWidth / 2))}
+                        y={20}
                         textAnchor="middle"
                         fontSize="10"
-                        fontWeight="bold"
-                        fill="#ecfdf5"
+                        fontFamily="'IBM Plex Mono', monospace"
+                        fontWeight="600"
+                        fill="#faf8f4"
                       >
                         P80: {formatCurrency(simulationResult.p80, currency)}
                       </text>
@@ -306,7 +306,8 @@ export function ResultsView() {
                       y={262}
                       textAnchor="middle"
                       fontSize="10"
-                      fill="#94a3b8"
+                      fontFamily="'IBM Plex Mono', monospace"
+                      fill="#57534a"
                     >
                       {formatCurrency(bin.minCost, currency)}
                     </text>
@@ -319,7 +320,7 @@ export function ResultsView() {
             {simulationResult.histogram.length > 1 && (
               <polyline
                 fill="none"
-                stroke="#e2e8f0"
+                stroke="#181715"
                 strokeWidth={2}
                 points={simulationResult.histogram
                   .map((bin, idx) => {

@@ -2,6 +2,8 @@
 
 An interactive Monte Carlo simulation and decision-tree (DAG) web application for project finance and budget estimation under uncertainty.
 
+>[Access it here!](https://lgdan.github.io/mcfm/)
+
 Built with **React 19**, **TypeScript**, **XYFlow (`@xyflow/react`)**, and **Zustand**.
 
 ![MC Finance Modeller Screenshot](./screenshot.png)

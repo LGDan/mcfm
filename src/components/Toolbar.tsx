@@ -1,4 +1,19 @@
 import { useRef, useState } from 'react';
+import {
+  mdiAlertCircleOutline,
+  mdiAutoFix,
+  mdiChartBellCurveCumulative,
+  mdiCheckDecagramOutline,
+  mdiDownloadOutline,
+  mdiFileChartOutline,
+  mdiFileDocumentPlusOutline,
+  mdiFileTreeOutline,
+  mdiFlaskOutline,
+  mdiPlay,
+  mdiSitemapOutline,
+  mdiUploadOutline,
+  mdiViewSplitVertical,
+} from '@mdi/js';
 import { useModelStore } from '../store/modelStore';
 import {
   CURRENCY_OPTIONS,
@@ -7,6 +22,8 @@ import {
   type CurrencyCode,
   type LayoutAlgorithm,
 } from '../types/model';
+import { downloadSimulationReport } from '../sim/reportGenerator';
+import { MdiIcon } from './MdiIcon';
 
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -14,6 +31,8 @@ export function Toolbar() {
 
   const modelName = useModelStore((s) => s.modelName);
   const setModelName = useModelStore((s) => s.setModelName);
+  const nodes = useModelStore((s) => s.nodes);
+  const edges = useModelStore((s) => s.edges);
   const currency = useModelStore((s) => s.currency);
   const setCurrency = useModelStore((s) => s.setCurrency);
   const activeTab = useModelStore((s) => s.activeTab);
@@ -94,14 +113,16 @@ export function Toolbar() {
           className={`tab-btn ${activeTab === 'editor' ? 'is-active' : ''}`}
           onClick={() => setActiveTab('editor')}
         >
-          DAG Editor
+          <MdiIcon path={mdiSitemapOutline} size={15} />
+          <span>Editor</span>
         </button>
         <button
           type="button"
           className={`tab-btn ${activeTab === 'results' ? 'is-active' : ''}`}
           onClick={() => setActiveTab('results')}
         >
-          Simulation Results
+          <MdiIcon path={mdiChartBellCurveCumulative} size={15} />
+          <span>Results</span>
           {simulationResult && (
             <span className="tab-p80-badge">
               P80: {formatCurrency(simulationResult.p80, currency)}
@@ -121,16 +142,26 @@ export function Toolbar() {
               : validation.errors.map((e) => e.message).join('\n')
           }
         >
-          {validation.valid
-            ? 'Valid DAG'
-            : `${validation.errors.length} Error${
-                validation.errors.length === 1 ? '' : 's'
-              }`}
+          <MdiIcon
+            path={
+              validation.valid
+                ? mdiCheckDecagramOutline
+                : mdiAlertCircleOutline
+            }
+            size={13}
+          />
+          <span>
+            {validation.valid
+              ? 'Valid'
+              : `${validation.errors.length} Error${
+                  validation.errors.length === 1 ? '' : 's'
+                }`}
+          </span>
         </div>
 
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-primary btn-with-icon"
           disabled={!validation.valid}
           onClick={() => runSimulation(true)}
           title={
@@ -139,7 +170,8 @@ export function Toolbar() {
               : 'Fix validation errors before running simulation'
           }
         >
-          Run Simulation
+          <MdiIcon path={mdiPlay} size={15} />
+          <span>Run</span>
         </button>
 
         <div className="toolbar-divider" />
@@ -159,7 +191,8 @@ export function Toolbar() {
                 onClick={() => setOutcomeDisplayMode('separate')}
                 title="Show Outcomes as separate nodes on the canvas"
               >
-                Separate Nodes
+                <MdiIcon path={mdiFileTreeOutline} size={13} />
+                <span>Separate</span>
               </button>
               <button
                 type="button"
@@ -169,7 +202,8 @@ export function Toolbar() {
                 onClick={() => setOutcomeDisplayMode('nested')}
                 title="Show Outcomes nested inside their parent Question node"
               >
-                Nested Outcomes
+                <MdiIcon path={mdiViewSplitVertical} size={13} />
+                <span>Nested</span>
               </button>
             </div>
 
@@ -190,38 +224,73 @@ export function Toolbar() {
             </select>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn btn-secondary btn-with-icon"
               onClick={() => autoLayout()}
               title="Arrange nodes using the selected layout algorithm"
             >
-              Auto-Layout
+              <MdiIcon path={mdiAutoFix} size={14} />
+              <span>Layout</span>
             </button>
           </div>
         )}
 
         <button
           type="button"
-          className="btn btn-ghost"
+          className="btn btn-ghost btn-with-icon"
           onClick={resetToNewModel}
+          title="Start a new model"
         >
-          New
+          <MdiIcon path={mdiFileDocumentPlusOutline} size={14} />
+          <span>New</span>
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="btn btn-ghost btn-with-icon"
           onClick={loadDemoModel}
+          title="Load reference demo model"
         >
-          Demo
-        </button>
-        <button type="button" className="btn btn-ghost" onClick={handleExport}>
-          Export
+          <MdiIcon path={mdiFlaskOutline} size={14} />
+          <span>Demo</span>
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
-          onClick={() => fileInputRef.current?.click()}
+          className="btn btn-ghost btn-with-icon"
+          disabled={!simulationResult || !validation.valid}
+          onClick={() => {
+            if (!simulationResult) return;
+            downloadSimulationReport(
+              {
+                modelName,
+                currency,
+                nodes,
+                edges,
+                result: simulationResult,
+              },
+              'html'
+            );
+          }}
+          title="Download standalone HTML budget report"
         >
-          Import
+          <MdiIcon path={mdiFileChartOutline} size={14} />
+          <span>Report</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-with-icon"
+          onClick={handleExport}
+          title="Export model as JSON"
+        >
+          <MdiIcon path={mdiDownloadOutline} size={14} />
+          <span>Export</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-with-icon"
+          onClick={() => fileInputRef.current?.click()}
+          title="Import model from JSON"
+        >
+          <MdiIcon path={mdiUploadOutline} size={14} />
+          <span>Import</span>
         </button>
         <input
           ref={fileInputRef}

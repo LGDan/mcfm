@@ -1,8 +1,24 @@
 import { useState } from 'react';
+import {
+  mdiDownloadOutline,
+  mdiFileDelimitedOutline,
+  mdiFileDocumentOutline,
+  mdiLanguageMarkdownOutline,
+  mdiPrinterOutline,
+  mdiRefresh,
+} from '@mdi/js';
 import { useModelStore } from '../store/modelStore';
 import { formatCurrency, type HistogramBin } from '../types/model';
+import {
+  downloadSimulationReport,
+  openPrintableReportWindow,
+} from '../sim/reportGenerator';
+import { MdiIcon } from './MdiIcon';
 
 export function ResultsView() {
+  const modelName = useModelStore((s) => s.modelName);
+  const nodes = useModelStore((s) => s.nodes);
+  const edges = useModelStore((s) => s.edges);
   const simulationResult = useModelStore((s) => s.simulationResult);
   const currency = useModelStore((s) => s.currency);
   const validation = useModelStore((s) => s.validation);
@@ -12,6 +28,7 @@ export function ResultsView() {
   const setActiveTab = useModelStore((s) => s.setActiveTab);
 
   const [hoveredBin, setHoveredBin] = useState<HistogramBin | null>(null);
+  const [reportMenuOpen, setReportMenuOpen] = useState(false);
 
   if (!validation.valid) {
     return (
@@ -92,11 +109,137 @@ export function ResultsView() {
 
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary btn-with-icon"
             onClick={() => runSimulation(false)}
           >
-            Re-run Simulation
+            <MdiIcon path={mdiRefresh} size={15} />
+            <span>Re-run Simulation</span>
           </button>
+
+          <div className="report-dropdown-wrap">
+            <button
+              type="button"
+              className="btn btn-secondary btn-with-icon"
+              onClick={() => setReportMenuOpen((v) => !v)}
+              title="Generate or download a formatted project budget report"
+            >
+              <MdiIcon path={mdiDownloadOutline} size={15} />
+              <span>Export Report ▾</span>
+            </button>
+
+            {reportMenuOpen && (
+              <div className="report-dropdown-menu" role="menu">
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    downloadSimulationReport(
+                      {
+                        modelName,
+                        currency,
+                        nodes,
+                        edges,
+                        result: simulationResult,
+                      },
+                      'html'
+                    );
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiFileDocumentOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Download HTML Report (.html)
+                    </div>
+                    <div className="report-menu-sub">
+                      Standalone interactive report with embedded SVG chart
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    openPrintableReportWindow({
+                      modelName,
+                      currency,
+                      nodes,
+                      edges,
+                      result: simulationResult,
+                    });
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiPrinterOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Open Printable / Save as PDF
+                    </div>
+                    <div className="report-menu-sub">
+                      Opens formatted actuarial dossier ready for Print to PDF
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    downloadSimulationReport(
+                      {
+                        modelName,
+                        currency,
+                        nodes,
+                        edges,
+                        result: simulationResult,
+                      },
+                      'markdown'
+                    );
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiLanguageMarkdownOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Download Markdown (.md)
+                    </div>
+                    <div className="report-menu-sub">
+                      Executive summary, percentiles, and tables for Confluence / GitHub
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="report-menu-item"
+                  onClick={() => {
+                    downloadSimulationReport(
+                      {
+                        modelName,
+                        currency,
+                        nodes,
+                        edges,
+                        result: simulationResult,
+                      },
+                      'csv'
+                    );
+                    setReportMenuOpen(false);
+                  }}
+                >
+                  <MdiIcon path={mdiFileDelimitedOutline} size={15} />
+                  <div>
+                    <div className="report-menu-title">
+                      Download Spreadsheet (.csv)
+                    </div>
+                    <div className="report-menu-sub">
+                      Percentiles, cost drivers, and histogram bins for Excel
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -157,11 +300,9 @@ export function ResultsView() {
       <section className="chart-panel">
         <div className="chart-panel-header">
           <div>
-            <h2>Project Cost Distribution & Cumulative Probability</h2>
+            <h2>Cost Distribution &amp; Cumulative Probability</h2>
             <p className="chart-panel-sub">
-              Teal bars are within the P80 budget (
-              {formatCurrency(simulationResult.p80, currency)}); amber bars
-              represent tail risk above P80.
+              Prussian blue bars lie within the P80 budget ({formatCurrency(simulationResult.p80, currency)}); vermilion bars represent tail risk above P80.
             </p>
           </div>
           {hoveredBin && (
@@ -193,15 +334,16 @@ export function ResultsView() {
                     x2={865}
                     y1={y}
                     y2={y}
-                    stroke="#1e293b"
-                    strokeDasharray="4 4"
+                    stroke="#e2dcd1"
+                    strokeDasharray="3 3"
                   />
                   <text
                     x={48}
                     y={y + 4}
                     textAnchor="end"
                     fontSize="10"
-                    fill="#94a3b8"
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill="#6e685f"
                   >
                     {pctLabel}
                   </text>
@@ -210,7 +352,8 @@ export function ResultsView() {
                     y={y + 4}
                     textAnchor="start"
                     fontSize="10"
-                    fill="#64748b"
+                    fontFamily="'IBM Plex Mono', monospace"
+                    fill="#8c8578"
                   >
                     {cdfLabel}
                   </text>
@@ -224,10 +367,10 @@ export function ResultsView() {
               x2={865}
               y1={240 - 0.8 * 200}
               y2={240 - 0.8 * 200}
-              stroke="#10b981"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-              opacity={0.6}
+              stroke="#1d5c4b"
+              strokeWidth={1.2}
+              strokeDasharray="4 3"
+              opacity={0.75}
             />
 
             {/* Bars */}
@@ -243,10 +386,10 @@ export function ResultsView() {
                 bin.minCost > simulationResult.p80 && !bin.containsP80;
 
               const fill = bin.containsP80
-                ? '#10b981'
+                ? '#1d5c4b'
                 : isAboveP80
-                  ? '#f59e0b'
-                  : '#0ea5e9';
+                  ? '#c44528'
+                  : '#224b7a';
 
               return (
                 <g
@@ -260,9 +403,9 @@ export function ResultsView() {
                     y={y}
                     width={barWidth}
                     height={Math.max(2, barHeight)}
-                    rx={3}
+                    rx={1}
                     fill={fill}
-                    opacity={hoveredBin === bin ? 1 : 0.85}
+                    opacity={hoveredBin === bin ? 1 : 0.86}
                   />
                   {bin.containsP80 && (
                     <g>
@@ -271,26 +414,26 @@ export function ResultsView() {
                         x2={x + barWidth / 2}
                         y1={24}
                         y2={245}
-                        stroke="#10b981"
-                        strokeWidth={2}
+                        stroke="#1d5c4b"
+                        strokeWidth={1.75}
                         strokeDasharray="4 3"
                       />
                       <rect
-                        x={Math.min(790, Math.max(60, x + barWidth / 2 - 48))}
-                        y={8}
-                        width={96}
-                        height={20}
-                        rx={4}
-                        fill="#065f46"
-                        stroke="#10b981"
+                        x={Math.min(782, Math.max(60, x + barWidth / 2 - 54))}
+                        y={6}
+                        width={108}
+                        height={21}
+                        rx={2}
+                        fill="#1d5c4b"
                       />
                       <text
-                        x={Math.min(838, Math.max(108, x + barWidth / 2))}
-                        y={22}
+                        x={Math.min(836, Math.max(114, x + barWidth / 2))}
+                        y={20}
                         textAnchor="middle"
                         fontSize="10"
-                        fontWeight="bold"
-                        fill="#ecfdf5"
+                        fontFamily="'IBM Plex Mono', monospace"
+                        fontWeight="600"
+                        fill="#faf8f4"
                       >
                         P80: {formatCurrency(simulationResult.p80, currency)}
                       </text>
@@ -306,7 +449,8 @@ export function ResultsView() {
                       y={262}
                       textAnchor="middle"
                       fontSize="10"
-                      fill="#94a3b8"
+                      fontFamily="'IBM Plex Mono', monospace"
+                      fill="#57534a"
                     >
                       {formatCurrency(bin.minCost, currency)}
                     </text>
@@ -319,7 +463,7 @@ export function ResultsView() {
             {simulationResult.histogram.length > 1 && (
               <polyline
                 fill="none"
-                stroke="#e2e8f0"
+                stroke="#181715"
                 strokeWidth={2}
                 points={simulationResult.histogram
                   .map((bin, idx) => {

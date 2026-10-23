@@ -82,20 +82,20 @@ export function decorateEdge(
   }
 
   const strokeColor = isAnd
-    ? '#f59e0b'
+    ? '#a66a12'
     : isQuestionEnd
-      ? '#a78bfa'
+      ? '#4a463f'
       : isOr
-        ? '#38bdf8'
+        ? '#224b7a'
         : isEnd
-          ? '#64748b'
-          : '#94a3b8';
+          ? '#6e685f'
+          : '#181715';
 
   const strokeWidth = associatedOutcome
     ? computeProbabilityStrokeWidth(associatedOutcome.data.probabilityPct)
     : isAnd || isQuestionEnd
-      ? 3.5
-      : 2.5;
+      ? 2.75
+      : 2.25;
 
   const isZeroProb =
     associatedOutcome !== undefined &&
@@ -109,29 +109,46 @@ export function decorateEdge(
     animated: isAnd,
     label,
     labelStyle: isAnd
-      ? { fill: '#fbbf24', fontWeight: 700, fontSize: 11 }
+      ? {
+          fill: '#8f580a',
+          fontWeight: 600,
+          fontSize: 10.5,
+          fontFamily: "'IBM Plex Mono', monospace",
+          letterSpacing: '0.04em',
+        }
       : isQuestionEnd
-        ? { fill: '#c4b5fd', fontWeight: 700, fontSize: 10.5 }
-        : { fill: '#e2e8f0', fontWeight: 600, fontSize: 11 },
+        ? {
+            fill: '#181715',
+            fontWeight: 600,
+            fontSize: 10,
+            fontFamily: "'IBM Plex Mono', monospace",
+            letterSpacing: '0.04em',
+          }
+        : {
+            fill: '#181715',
+            fontWeight: 600,
+            fontSize: 10.5,
+            fontFamily: "'IBM Plex Mono', monospace",
+          },
     labelBgStyle: {
-      fill: '#0f172a',
-      fillOpacity: 0.9,
+      fill: '#faf8f4',
+      fillOpacity: 0.96,
       stroke: strokeColor,
       strokeWidth: 1,
     },
     labelBgPadding: [6, 3],
-    labelBgBorderRadius: 4,
+    labelBgBorderRadius: 2,
     style: {
       stroke: strokeColor,
       strokeWidth,
-      strokeOpacity: isZeroProb ? 0.35 : 0.95,
+      strokeOpacity: isZeroProb ? 0.3 : 0.9,
       strokeDasharray: isAnd ? '6 4' : isZeroProb ? '3 3' : undefined,
     },
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: strokeColor,
-      width: 14,
-      height: 14,
+      width: 13,
+      height: 13,
     },
     data: { kind },
   };
@@ -221,11 +238,15 @@ interface ModelStoreState {
   layoutVersion: number;
   layoutAlgorithm: LayoutAlgorithm;
   outcomeDisplayMode: OutcomeDisplayMode;
+  toolboxCollapsed: boolean;
+  propertiesCollapsed: boolean;
 
   setModelName: (name: string) => void;
   setCurrency: (currency: CurrencyCode) => void;
   setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void;
   setOutcomeDisplayMode: (mode: OutcomeDisplayMode) => void;
+  toggleToolboxCollapsed: () => void;
+  togglePropertiesCollapsed: () => void;
   setActiveTab: (tab: ActiveTab) => void;
   setTrials: (trials: number) => void;
   clearConnectionError: () => void;
@@ -289,6 +310,8 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   layoutVersion: 0,
   layoutAlgorithm: 'layered-lr',
   outcomeDisplayMode: 'separate',
+  toolboxCollapsed: false,
+  propertiesCollapsed: false,
 
   setModelName: (name) => {
     set({ modelName: name });
@@ -305,6 +328,12 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     set({ outcomeDisplayMode: mode });
     get().autoLayout();
   },
+
+  toggleToolboxCollapsed: () =>
+    set((s) => ({ toolboxCollapsed: !s.toolboxCollapsed })),
+
+  togglePropertiesCollapsed: () =>
+    set((s) => ({ propertiesCollapsed: !s.propertiesCollapsed })),
 
   setCurrency: (currency) => {
     const { modelName, nodes, edges, simulationResult } = get();
@@ -482,6 +511,13 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         connectionError: 'Model already has a Start node (only one is allowed).',
       });
       const existing = nodes.find((n) => n.type === 'start')!;
+      return existing.id;
+    }
+    if (type === 'end' && nodes.some((n) => n.type === 'end')) {
+      set({
+        connectionError: 'Model already has an End node on the canvas.',
+      });
+      const existing = nodes.find((n) => n.type === 'end')!;
       return existing.id;
     }
 
@@ -804,14 +840,17 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     if (!clipboard || clipboard.nodes.length === 0) return [];
 
     const hasExistingStart = nodes.some((n) => n.type === 'start');
+    const hasExistingEnd = nodes.some((n) => n.type === 'end');
     const pasteableNodes = clipboard.nodes.filter(
-      (n) => !(n.type === 'start' && hasExistingStart)
+      (n) =>
+        !(n.type === 'start' && hasExistingStart) &&
+        !(n.type === 'end' && hasExistingEnd)
     );
 
     if (pasteableNodes.length === 0) {
       set({
         connectionError:
-          'Cannot paste another Start node (only one Start node is allowed).',
+          'Cannot paste another Start or End node when one already exists on the canvas.',
       });
       return [];
     }

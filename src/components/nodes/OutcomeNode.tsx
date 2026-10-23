@@ -1,7 +1,9 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { mdiSourceBranch } from '@mdi/js';
 import { formatCurrency, type OutcomeFlowNode } from '../../types/model';
 import { isOutcomeOutputBlocked } from '../../sim/validate';
 import { useModelStore } from '../../store/modelStore';
+import { MdiIcon } from '../MdiIcon';
 
 export function OutcomeNode({
   id,
@@ -24,7 +26,10 @@ export function OutcomeNode({
       />
 
       <div className="flow-node-header">
-        <span className="flow-node-badge badge-outcome">OUTCOME (OR)</span>
+        <span className="flow-node-badge badge-outcome">
+          <MdiIcon path={mdiSourceBranch} size={11} />
+          <span>OUTCOME (OR)</span>
+        </span>
         <span className="outcome-prob-badge">{data.probabilityPct}%</span>
       </div>
 

@@ -1,4 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { mdiHelpRhombusOutline, mdiPlus } from '@mdi/js';
 import {
   formatCurrency,
   type OutcomeFlowNode,
@@ -9,6 +10,7 @@ import {
   isQuestionOutputBlocked,
 } from '../../sim/validate';
 import { useModelStore } from '../../store/modelStore';
+import { MdiIcon } from '../MdiIcon';
 
 export function QuestionNode({
   id,
@@ -76,7 +78,10 @@ export function QuestionNode({
       />
 
       <div className="flow-node-header">
-        <span className="flow-node-badge badge-question">QUESTION</span>
+        <span className="flow-node-badge badge-question">
+          <MdiIcon path={mdiHelpRhombusOutline} size={11} />
+          <span>QUESTION</span>
+        </span>
         <span
           className={`prob-sum-pill ${isBalanced ? 'pill-ok' : 'pill-err'}`}
           title={
@@ -185,7 +190,8 @@ export function QuestionNode({
           }}
           title="Quickly add an Outcome branch to this question"
         >
-          + Outcome
+          <MdiIcon path={mdiPlus} size={11} />
+          <span>Outcome</span>
         </button>
       </div>
 

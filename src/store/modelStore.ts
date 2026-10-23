@@ -8,18 +8,21 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react';
-import type {
-  EdgeKind,
-  ModelEdge,
-  ModelNode,
-  ModelNodeType,
-  OutcomeFlowNode,
-  ProjectModel,
-  SimulationResult,
-  ValidationResult,
+import {
+  formatCurrency,
+  type CurrencyCode,
+  type EdgeKind,
+  type ModelEdge,
+  type ModelNode,
+  type ModelNodeType,
+  type OutcomeFlowNode,
+  type ProjectModel,
+  type SimulationResult,
+  type ValidationResult,
 } from '../types/model';
 import { canConnectNodes, inferEdgeKind, validateModel } from '../sim/validate';
 import { runMonteCarloSimulation } from '../sim/monteCarlo';
+import { computeAutoLayout } from '../sim/autoLayout';
 import { DEMO_MODEL } from './demoModel';
 
 const STORAGE_KEY = 'mc-modeller:v1';
@@ -104,6 +107,7 @@ function loadInitialModel(): ProjectModel {
         return {
           version: 1,
           name: parsed.name || 'Untitled Project Model',
+          currency: parsed.currency || 'GBP',
           nodes: parsed.nodes,
           edges: hydrateEdges(parsed.nodes, parsed.edges),
           viewport: parsed.viewport,
@@ -115,15 +119,22 @@ function loadInitialModel(): ProjectModel {
   }
   return {
     ...DEMO_MODEL,
+    currency: DEMO_MODEL.currency ?? 'GBP',
     edges: hydrateEdges(DEMO_MODEL.nodes, DEMO_MODEL.edges),
   };
 }
 
-function persistDraft(name: string, nodes: ModelNode[], edges: ModelEdge[]) {
+function persistDraft(
+  name: string,
+  currency: CurrencyCode,
+  nodes: ModelNode[],
+  edges: ModelEdge[]
+) {
   try {
     const payload: ProjectModel = {
       version: 1,
       name,
+      currency,
       nodes,
       edges,
     };
@@ -135,6 +146,7 @@ function persistDraft(name: string, nodes: ModelNode[], edges: ModelEdge[]) {
 
 interface ModelStoreState {
   modelName: string;
+  currency: CurrencyCode;
   nodes: ModelNode[];
   edges: ModelEdge[];
   selectedNodeId: string | null;
@@ -144,8 +156,10 @@ interface ModelStoreState {
   validation: ValidationResult;
   simulationResult: SimulationResult | null;
   connectionError: string | null;
+  layoutVersion: number;
 
   setModelName: (name: string) => void;
+  setCurrency: (currency: CurrencyCode) => void;
   setActiveTab: (tab: ActiveTab) => void;
   setTrials: (trials: number) => void;
   clearConnectionError: () => void;
@@ -164,6 +178,7 @@ interface ModelStoreState {
 
   addOutcomeForQuestion: (questionId: string) => void;
   splitQuestionProbabilitiesEvenly: (questionId: string) => void;
+  autoLayout: () => void;
 
   runSimulation: (switchTab?: boolean) => boolean;
   resetToNewModel: () => void;
@@ -173,13 +188,20 @@ interface ModelStoreState {
 }
 
 const initialModel = loadInitialModel();
+const initialCurrency: CurrencyCode = initialModel.currency ?? 'GBP';
 const initialValidation = validateModel(initialModel.nodes, initialModel.edges);
 const initialSimulation = initialValidation.valid
-  ? runMonteCarloSimulation(initialModel.nodes, initialModel.edges, 10000)
+  ? runMonteCarloSimulation(
+      initialModel.nodes,
+      initialModel.edges,
+      10000,
+      initialCurrency
+    )
   : null;
 
 export const useModelStore = create<ModelStoreState>((set, get) => ({
   modelName: initialModel.name,
+  currency: initialCurrency,
   nodes: initialModel.nodes,
   edges: initialModel.edges,
   selectedNodeId: null,
@@ -189,11 +211,35 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   validation: initialValidation,
   simulationResult: initialSimulation,
   connectionError: null,
+  layoutVersion: 0,
 
   setModelName: (name) => {
     set({ modelName: name });
-    const { nodes, edges } = get();
-    persistDraft(name, nodes, edges);
+    const { currency, nodes, edges } = get();
+    persistDraft(name, currency, nodes, edges);
+  },
+
+  setCurrency: (currency) => {
+    const { modelName, nodes, edges, simulationResult } = get();
+    // Relabel histogram bins if a simulation result is already present
+    const updatedSim: SimulationResult | null = simulationResult
+      ? {
+          ...simulationResult,
+          histogram: simulationResult.histogram.map((b) => ({
+            ...b,
+            label:
+              Math.abs(b.maxCost - b.minCost) < 1e-6
+                ? formatCurrency(b.minCost, currency)
+                : `${formatCurrency(b.minCost, currency)} – ${formatCurrency(
+                    b.maxCost,
+                    currency
+                  )}`,
+          })),
+        }
+      : null;
+
+    set({ currency, simulationResult: updatedSim });
+    persistDraft(modelName, currency, nodes, edges);
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -207,7 +253,6 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     const nextEdges = hydrateEdges(nextNodes, get().edges);
     const validation = validateModel(nextNodes, nextEdges);
 
-    // Clear selectedNodeId if removed
     const selectedNodeId = get().selectedNodeId;
     const stillExists =
       selectedNodeId && nextNodes.some((n) => n.id === selectedNodeId);
@@ -218,7 +263,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       validation,
       selectedNodeId: stillExists ? selectedNodeId : null,
     });
-    persistDraft(get().modelName, nextNodes, nextEdges);
+    persistDraft(get().modelName, get().currency, nextNodes, nextEdges);
   },
 
   onEdgesChange: (changes) => {
@@ -234,11 +279,11 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       validation,
       selectedEdgeId: stillExists ? selectedEdgeId : null,
     });
-    persistDraft(get().modelName, get().nodes, nextEdges);
+    persistDraft(get().modelName, get().currency, get().nodes, nextEdges);
   },
 
   onConnect: (connection) => {
-    const { nodes, edges, modelName } = get();
+    const { nodes, edges, modelName, currency } = get();
     const check = canConnectNodes(
       nodes,
       edges,
@@ -269,7 +314,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       validation,
       connectionError: null,
     });
-    persistDraft(modelName, nodes, nextEdges);
+    persistDraft(modelName, currency, nodes, nextEdges);
   },
 
   selectNode: (nodeId) =>
@@ -279,7 +324,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     set({ selectedEdgeId: edgeId, selectedNodeId: null }),
 
   addNode: (type, position) => {
-    const { nodes, edges, modelName } = get();
+    const { nodes, edges, modelName, currency } = get();
     if (type === 'start' && nodes.some((n) => n.type === 'start')) {
       set({
         connectionError: 'Model already has a Start node (only one is allowed).',
@@ -344,12 +389,12 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       selectedEdgeId: null,
       connectionError: null,
     });
-    persistDraft(modelName, nextNodes, edges);
+    persistDraft(modelName, currency, nextNodes, edges);
     return id;
   },
 
   updateNodeData: (nodeId, patch) => {
-    const { nodes, edges, modelName } = get();
+    const { nodes, edges, modelName, currency } = get();
     const nextNodes = nodes.map((n) => {
       if (n.id !== nodeId) return n;
       return {
@@ -363,7 +408,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     const nextEdges = hydrateEdges(nextNodes, edges);
     const validation = validateModel(nextNodes, nextEdges);
     set({ nodes: nextNodes, edges: nextEdges, validation });
-    persistDraft(modelName, nextNodes, nextEdges);
+    persistDraft(modelName, currency, nextNodes, nextEdges);
   },
 
   deleteSelected: () => {
@@ -376,7 +421,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   },
 
   deleteNodeById: (nodeId) => {
-    const { nodes, edges, modelName } = get();
+    const { nodes, edges, modelName, currency } = get();
     const nextNodes = nodes.filter((n) => n.id !== nodeId);
     const nextEdges = hydrateEdges(
       nextNodes,
@@ -389,11 +434,11 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       validation,
       selectedNodeId: null,
     });
-    persistDraft(modelName, nextNodes, nextEdges);
+    persistDraft(modelName, currency, nextNodes, nextEdges);
   },
 
   deleteEdgeById: (edgeId) => {
-    const { nodes, edges, modelName } = get();
+    const { nodes, edges, modelName, currency } = get();
     const nextEdges = hydrateEdges(
       nodes,
       edges.filter((e) => e.id !== edgeId)
@@ -404,11 +449,11 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       validation,
       selectedEdgeId: null,
     });
-    persistDraft(modelName, nodes, nextEdges);
+    persistDraft(modelName, currency, nodes, nextEdges);
   },
 
   addOutcomeForQuestion: (questionId) => {
-    const { nodes, edges, modelName } = get();
+    const { nodes, edges, modelName, currency } = get();
     const qNode = nodes.find((n) => n.id === questionId && n.type === 'question');
     if (!qNode) return;
 
@@ -463,11 +508,11 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       validation,
       connectionError: null,
     });
-    persistDraft(modelName, nextNodes, nextEdges);
+    persistDraft(modelName, currency, nextNodes, nextEdges);
   },
 
   splitQuestionProbabilitiesEvenly: (questionId) => {
-    const { nodes, edges, modelName } = get();
+    const { nodes, edges, modelName, currency } = get();
     const outcomeIds = edges
       .filter((e) => e.source === questionId)
       .map((e) => e.target)
@@ -501,17 +546,27 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     const nextEdges = hydrateEdges(nextNodes, edges);
     const validation = validateModel(nextNodes, nextEdges);
     set({ nodes: nextNodes, edges: nextEdges, validation });
-    persistDraft(modelName, nextNodes, nextEdges);
+    persistDraft(modelName, currency, nextNodes, nextEdges);
+  },
+
+  autoLayout: () => {
+    const { nodes, edges, modelName, currency, layoutVersion } = get();
+    const laidOutNodes = computeAutoLayout(nodes, edges);
+    set({
+      nodes: laidOutNodes,
+      layoutVersion: layoutVersion + 1,
+    });
+    persistDraft(modelName, currency, laidOutNodes, edges);
   },
 
   runSimulation: (switchTab = true) => {
-    const { nodes, edges, trials } = get();
+    const { nodes, edges, trials, currency } = get();
     const validation = validateModel(nodes, edges);
     if (!validation.valid) {
       set({ validation });
       return false;
     }
-    const result = runMonteCarloSimulation(nodes, edges, trials);
+    const result = runMonteCarloSimulation(nodes, edges, trials, currency);
     set({
       validation,
       simulationResult: result,
@@ -521,6 +576,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   },
 
   resetToNewModel: () => {
+    const { currency, trials, layoutVersion } = get();
     const freshNodes: ModelNode[] = [
       {
         id: 'start-1',
@@ -605,18 +661,30 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       selectedNodeId: 'q-1',
       selectedEdgeId: null,
       validation,
-      simulationResult: runMonteCarloSimulation(freshNodes, freshEdges, get().trials),
+      simulationResult: runMonteCarloSimulation(
+        freshNodes,
+        freshEdges,
+        trials,
+        currency
+      ),
       activeTab: 'editor',
       connectionError: null,
+      layoutVersion: layoutVersion + 1,
     });
-    persistDraft(name, freshNodes, freshEdges);
+    persistDraft(name, currency, freshNodes, freshEdges);
   },
 
   loadDemoModel: () => {
+    const { currency, trials, layoutVersion } = get();
     const nodes = structuredClone(DEMO_MODEL.nodes);
     const edges = hydrateEdges(nodes, structuredClone(DEMO_MODEL.edges));
     const validation = validateModel(nodes, edges);
-    const simulationResult = runMonteCarloSimulation(nodes, edges, get().trials);
+    const simulationResult = runMonteCarloSimulation(
+      nodes,
+      edges,
+      trials,
+      currency
+    );
     set({
       modelName: DEMO_MODEL.name,
       nodes,
@@ -626,15 +694,17 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       validation,
       simulationResult,
       connectionError: null,
+      layoutVersion: layoutVersion + 1,
     });
-    persistDraft(DEMO_MODEL.name, nodes, edges);
+    persistDraft(DEMO_MODEL.name, currency, nodes, edges);
   },
 
   exportModelJson: () => {
-    const { modelName, nodes, edges } = get();
+    const { modelName, currency, nodes, edges } = get();
     const payload: ProjectModel = {
       version: 1,
       name: modelName,
+      currency,
       nodes,
       edges,
     };
@@ -649,13 +719,15 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       }
       const nodes = parsed.nodes;
       const edges = hydrateEdges(nodes, parsed.edges);
+      const currency: CurrencyCode = parsed.currency ?? get().currency;
       const validation = validateModel(nodes, edges);
       const simulationResult = validation.valid
-        ? runMonteCarloSimulation(nodes, edges, get().trials)
+        ? runMonteCarloSimulation(nodes, edges, get().trials, currency)
         : null;
       const name = parsed.name || 'Imported Project Model';
       set({
         modelName: name,
+        currency,
         nodes,
         edges,
         selectedNodeId: null,
@@ -663,8 +735,9 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         validation,
         simulationResult,
         connectionError: null,
+        layoutVersion: get().layoutVersion + 1,
       });
-      persistDraft(name, nodes, edges);
+      persistDraft(name, currency, nodes, edges);
       return { ok: true };
     } catch (err) {
       return {

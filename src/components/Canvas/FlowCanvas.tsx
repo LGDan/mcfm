@@ -1,4 +1,4 @@
-import { useCallback, useRef, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, type DragEvent } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -28,10 +28,11 @@ const nodeTypes: NodeTypes = {
 
 function FlowCanvasInner() {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   const nodes = useModelStore((s) => s.nodes);
   const edges = useModelStore((s) => s.edges);
+  const layoutVersion = useModelStore((s) => s.layoutVersion);
   const onNodesChange = useModelStore((s) => s.onNodesChange);
   const onEdgesChange = useModelStore((s) => s.onEdgesChange);
   const onConnect = useModelStore((s) => s.onConnect);
@@ -40,6 +41,14 @@ function FlowCanvasInner() {
   const addNode = useModelStore((s) => s.addNode);
   const connectionError = useModelStore((s) => s.connectionError);
   const clearConnectionError = useModelStore((s) => s.clearConnectionError);
+
+  useEffect(() => {
+    if (layoutVersion === 0) return;
+    const timer = window.setTimeout(() => {
+      fitView({ padding: 0.18, duration: 300 });
+    }, 30);
+    return () => window.clearTimeout(timer);
+  }, [layoutVersion, fitView]);
 
   const isValidConnection: IsValidConnection = useCallback(
     (connection) => {

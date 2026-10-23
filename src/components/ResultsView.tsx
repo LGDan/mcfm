@@ -4,6 +4,7 @@ import { formatCurrency, type HistogramBin } from '../types/model';
 
 export function ResultsView() {
   const simulationResult = useModelStore((s) => s.simulationResult);
+  const currency = useModelStore((s) => s.currency);
   const validation = useModelStore((s) => s.validation);
   const trials = useModelStore((s) => s.trials);
   const setTrials = useModelStore((s) => s.setTrials);
@@ -103,7 +104,9 @@ export function ResultsView() {
       <section className="kpi-grid" aria-label="Budget percentiles">
         <div className="kpi-card kpi-p80-hero">
           <div className="kpi-tag">RECOMMENDED BUDGET (P80)</div>
-          <div className="kpi-value">{formatCurrency(simulationResult.p80)}</div>
+          <div className="kpi-value">
+            {formatCurrency(simulationResult.p80, currency)}
+          </div>
           <div className="kpi-caption">
             80% of simulated project pathways complete at or below this budget
           </div>
@@ -111,24 +114,28 @@ export function ResultsView() {
 
         <div className="kpi-card">
           <div className="kpi-tag">MEDIAN (P50)</div>
-          <div className="kpi-value">{formatCurrency(simulationResult.p50)}</div>
+          <div className="kpi-value">
+            {formatCurrency(simulationResult.p50, currency)}
+          </div>
           <div className="kpi-caption">50th percentile outcome</div>
         </div>
 
         <div className="kpi-card">
           <div className="kpi-tag">EXPECTED MEAN</div>
-          <div className="kpi-value">{formatCurrency(simulationResult.mean)}</div>
+          <div className="kpi-value">
+            {formatCurrency(simulationResult.mean, currency)}
+          </div>
           <div className="kpi-caption">
-            Std Dev: ±{formatCurrency(simulationResult.stdDev)}
+            Std Dev: ±{formatCurrency(simulationResult.stdDev, currency)}
           </div>
         </div>
 
         <div className="kpi-card">
           <div className="kpi-tag">CONSERVATIVE (P90 / P95)</div>
           <div className="kpi-value">
-            {formatCurrency(simulationResult.p90)}{' '}
+            {formatCurrency(simulationResult.p90, currency)}{' '}
             <span className="kpi-sub-val">
-              / {formatCurrency(simulationResult.p95)}
+              / {formatCurrency(simulationResult.p95, currency)}
             </span>
           </div>
           <div className="kpi-caption">High-confidence contingency targets</div>
@@ -137,11 +144,11 @@ export function ResultsView() {
         <div className="kpi-card">
           <div className="kpi-tag">OBSERVED RANGE (MIN – MAX)</div>
           <div className="kpi-value">
-            {formatCurrency(simulationResult.min)} –{' '}
-            {formatCurrency(simulationResult.max)}
+            {formatCurrency(simulationResult.min, currency)} –{' '}
+            {formatCurrency(simulationResult.max, currency)}
           </div>
           <div className="kpi-caption">
-            P10 optimistic: {formatCurrency(simulationResult.p10)}
+            P10 optimistic: {formatCurrency(simulationResult.p10, currency)}
           </div>
         </div>
       </section>
@@ -152,8 +159,9 @@ export function ResultsView() {
           <div>
             <h2>Project Cost Distribution & Cumulative Probability</h2>
             <p className="chart-panel-sub">
-              Teal bars are within the P80 budget ({formatCurrency(simulationResult.p80)});
-              amber bars represent tail risk above P80.
+              Teal bars are within the P80 budget (
+              {formatCurrency(simulationResult.p80, currency)}); amber bars
+              represent tail risk above P80.
             </p>
           </div>
           {hoveredBin && (
@@ -284,7 +292,7 @@ export function ResultsView() {
                         fontWeight="bold"
                         fill="#ecfdf5"
                       >
-                        P80: {formatCurrency(simulationResult.p80)}
+                        P80: {formatCurrency(simulationResult.p80, currency)}
                       </text>
                     </g>
                   )}
@@ -300,7 +308,7 @@ export function ResultsView() {
                       fontSize="10"
                       fill="#94a3b8"
                     >
-                      {formatCurrency(bin.minCost)}
+                      {formatCurrency(bin.minCost, currency)}
                     </text>
                   )}
                 </g>
@@ -358,7 +366,7 @@ export function ResultsView() {
                   <td className="td-question">{d.questionLabel}</td>
                   <td className="td-outcome">{d.outcomeLabel}</td>
                   <td>{d.configuredProbPct}%</td>
-                  <td>{formatCurrency(d.cost)}</td>
+                  <td>{formatCurrency(d.cost, currency)}</td>
                   <td>
                     <div className="hit-rate-cell">
                       <div className="hit-rate-bar-bg">
@@ -371,7 +379,7 @@ export function ResultsView() {
                     </div>
                   </td>
                   <td className="td-expected">
-                    {formatCurrency(d.expectedCostContribution)}
+                    {formatCurrency(d.expectedCostContribution, currency)}
                   </td>
                 </tr>
               ))}

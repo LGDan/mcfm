@@ -1,4 +1,5 @@
 import type {
+  CurrencyCode,
   HistogramBin,
   ModelEdge,
   ModelNode,
@@ -120,6 +121,7 @@ export function runMonteCarloSimulation(
   nodes: ModelNode[],
   edges: ModelEdge[],
   trials = 10000,
+  currency: CurrencyCode = 'GBP',
   rng: () => number = Math.random
 ): SimulationResult {
   const adj = compileGraph(nodes, edges);
@@ -196,7 +198,7 @@ export function runMonteCarloSimulation(
   }
   const stdDev = sorted.length > 0 ? Math.sqrt(varianceSum / sorted.length) : 0;
 
-  const histogram = buildHistogram(sorted, min, max, p80);
+  const histogram = buildHistogram(sorted, min, max, p80, currency);
 
   // Build cost-driver breakdown
   const questionDrivers: QuestionDriverStat[] = [];
@@ -270,7 +272,8 @@ function buildHistogram(
   sorted: Float64Array,
   min: number,
   max: number,
-  p80: number
+  p80: number,
+  currency: CurrencyCode
 ): HistogramBin[] {
   const n = sorted.length;
   if (n === 0) return [];
@@ -295,7 +298,7 @@ function buildHistogram(
       return {
         minCost: val,
         maxCost: val,
-        label: formatCurrency(val),
+        label: formatCurrency(val, currency),
         count,
         frequencyPct: (count / n) * 100,
         cumulativePct,
@@ -326,7 +329,7 @@ function buildHistogram(
     return {
       minCost: binMin,
       maxCost: binMax,
-      label: `${formatCurrency(binMin)} – ${formatCurrency(binMax)}`,
+      label: `${formatCurrency(binMin, currency)} – ${formatCurrency(binMax, currency)}`,
       count,
       frequencyPct: (count / n) * 100,
       cumulativePct: (cumCount / n) * 100,

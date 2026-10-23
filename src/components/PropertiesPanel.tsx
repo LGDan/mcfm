@@ -1,6 +1,7 @@
 import { useModelStore } from '../store/modelStore';
 import {
   formatCurrency,
+  getCurrencySymbol,
   type OutcomeFlowNode,
   type QuestionFlowNode,
 } from '../types/model';
@@ -8,6 +9,7 @@ import {
 export function PropertiesPanel() {
   const nodes = useModelStore((s) => s.nodes);
   const edges = useModelStore((s) => s.edges);
+  const currency = useModelStore((s) => s.currency);
   const selectedNodeId = useModelStore((s) => s.selectedNodeId);
   const selectedEdgeId = useModelStore((s) => s.selectedEdgeId);
   const validation = useModelStore((s) => s.validation);
@@ -21,6 +23,7 @@ export function PropertiesPanel() {
     (s) => s.splitQuestionProbabilitiesEvenly
   );
 
+  const currencySymbol = getCurrencySymbol(currency);
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId) ?? null;
 
@@ -210,7 +213,7 @@ export function PropertiesPanel() {
                     />
                   </div>
                   <div>
-                    <label>Cost ($)</label>
+                    <label>Cost ({currencySymbol})</label>
                     <input
                       type="number"
                       min={0}
@@ -360,7 +363,7 @@ export function PropertiesPanel() {
 
           <div className="prop-field">
             <label htmlFor="o-cost">
-              Pathway Cost Impact ({formatCurrency(oNode.data.cost)})
+              Pathway Cost Impact ({formatCurrency(oNode.data.cost, currency)})
             </label>
             <input
               id="o-cost"

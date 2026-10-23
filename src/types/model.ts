@@ -2,6 +2,27 @@ import type { Node, Edge, Viewport } from '@xyflow/react';
 
 export type ModelNodeType = 'start' | 'question' | 'outcome' | 'end';
 
+export type CurrencyCode = 'GBP' | 'USD' | 'EUR' | 'AUD' | 'CAD' | 'JPY';
+
+export const CURRENCY_OPTIONS: {
+  code: CurrencyCode;
+  symbol: string;
+  label: string;
+}[] = [
+  { code: 'GBP', symbol: '£', label: '£ GBP' },
+  { code: 'USD', symbol: '$', label: '$ USD' },
+  { code: 'EUR', symbol: '€', label: '€ EUR' },
+  { code: 'AUD', symbol: 'A$', label: 'A$ AUD' },
+  { code: 'CAD', symbol: 'C$', label: 'C$ CAD' },
+  { code: 'JPY', symbol: '¥', label: '¥ JPY' },
+];
+
+export function getCurrencySymbol(currency: CurrencyCode = 'GBP'): string {
+  return (
+    CURRENCY_OPTIONS.find((c) => c.code === currency)?.symbol ?? '£'
+  );
+}
+
 export interface StartNodeData extends Record<string, unknown> {
   label: string;
 }
@@ -112,15 +133,20 @@ export interface SimulationResult {
 export interface ProjectModel {
   version: 1;
   name: string;
+  currency?: CurrencyCode;
   nodes: ModelNode[];
   edges: ModelEdge[];
   viewport?: Viewport;
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
+export function formatCurrency(
+  amount: number,
+  currency: CurrencyCode = 'GBP'
+): string {
+  const locale = currency === 'GBP' ? 'en-GB' : 'en-US';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'USD',
+    currency,
     maximumFractionDigits: 0,
   }).format(amount);
 }

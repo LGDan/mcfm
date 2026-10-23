@@ -1,6 +1,10 @@
 import { useRef, useState } from 'react';
 import { useModelStore } from '../store/modelStore';
-import { formatCurrency } from '../types/model';
+import {
+  CURRENCY_OPTIONS,
+  formatCurrency,
+  type CurrencyCode,
+} from '../types/model';
 
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -8,11 +12,14 @@ export function Toolbar() {
 
   const modelName = useModelStore((s) => s.modelName);
   const setModelName = useModelStore((s) => s.setModelName);
+  const currency = useModelStore((s) => s.currency);
+  const setCurrency = useModelStore((s) => s.setCurrency);
   const activeTab = useModelStore((s) => s.activeTab);
   const setActiveTab = useModelStore((s) => s.setActiveTab);
   const validation = useModelStore((s) => s.validation);
   const simulationResult = useModelStore((s) => s.simulationResult);
   const runSimulation = useModelStore((s) => s.runSimulation);
+  const autoLayout = useModelStore((s) => s.autoLayout);
   const resetToNewModel = useModelStore((s) => s.resetToNewModel);
   const loadDemoModel = useModelStore((s) => s.loadDemoModel);
   const exportModelJson = useModelStore((s) => s.exportModelJson);
@@ -60,6 +67,19 @@ export function Toolbar() {
           onChange={(e) => setModelName(e.target.value)}
           aria-label="Project Model Name"
         />
+        <select
+          className="currency-select"
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
+          aria-label="Currency"
+          title="Select project currency"
+        >
+          {CURRENCY_OPTIONS.map((opt) => (
+            <option key={opt.code} value={opt.code}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <nav className="toolbar-tabs" aria-label="Main views">
@@ -78,7 +98,7 @@ export function Toolbar() {
           Simulation Results
           {simulationResult && (
             <span className="tab-p80-badge">
-              P80: {formatCurrency(simulationResult.p80)}
+              P80: {formatCurrency(simulationResult.p80, currency)}
             </span>
           )}
         </button>
@@ -117,6 +137,17 @@ export function Toolbar() {
         </button>
 
         <div className="toolbar-divider" />
+
+        {activeTab === 'editor' && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={autoLayout}
+            title="Automatically arrange nodes left-to-right by DAG rank"
+          >
+            Auto-Layout
+          </button>
+        )}
 
         <button
           type="button"

@@ -1,7 +1,10 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { formatCurrency, type OutcomeFlowNode } from '../../types/model';
+import { useModelStore } from '../../store/modelStore';
 
 export function OutcomeNode({ data, selected }: NodeProps<OutcomeFlowNode>) {
+  const currency = useModelStore((s) => s.currency);
+
   return (
     <div
       className={`flow-node flow-node-outcome ${selected ? 'is-selected' : ''}`}
@@ -22,7 +25,7 @@ export function OutcomeNode({ data, selected }: NodeProps<OutcomeFlowNode>) {
       <div className="outcome-cost-row">
         <span className="outcome-cost-label">Cost impact</span>
         <span className="outcome-cost-value">
-          +{formatCurrency(Number(data.cost) || 0)}
+          +{formatCurrency(Number(data.cost) || 0, currency)}
         </span>
       </div>
 

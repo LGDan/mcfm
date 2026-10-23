@@ -238,11 +238,15 @@ interface ModelStoreState {
   layoutVersion: number;
   layoutAlgorithm: LayoutAlgorithm;
   outcomeDisplayMode: OutcomeDisplayMode;
+  toolboxCollapsed: boolean;
+  propertiesCollapsed: boolean;
 
   setModelName: (name: string) => void;
   setCurrency: (currency: CurrencyCode) => void;
   setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void;
   setOutcomeDisplayMode: (mode: OutcomeDisplayMode) => void;
+  toggleToolboxCollapsed: () => void;
+  togglePropertiesCollapsed: () => void;
   setActiveTab: (tab: ActiveTab) => void;
   setTrials: (trials: number) => void;
   clearConnectionError: () => void;
@@ -306,6 +310,8 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   layoutVersion: 0,
   layoutAlgorithm: 'layered-lr',
   outcomeDisplayMode: 'separate',
+  toolboxCollapsed: false,
+  propertiesCollapsed: false,
 
   setModelName: (name) => {
     set({ modelName: name });
@@ -322,6 +328,12 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     set({ outcomeDisplayMode: mode });
     get().autoLayout();
   },
+
+  toggleToolboxCollapsed: () =>
+    set((s) => ({ toolboxCollapsed: !s.toolboxCollapsed })),
+
+  togglePropertiesCollapsed: () =>
+    set((s) => ({ propertiesCollapsed: !s.propertiesCollapsed })),
 
   setCurrency: (currency) => {
     const { modelName, nodes, edges, simulationResult } = get();
@@ -499,6 +511,13 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         connectionError: 'Model already has a Start node (only one is allowed).',
       });
       const existing = nodes.find((n) => n.type === 'start')!;
+      return existing.id;
+    }
+    if (type === 'end' && nodes.some((n) => n.type === 'end')) {
+      set({
+        connectionError: 'Model already has an End node on the canvas.',
+      });
+      const existing = nodes.find((n) => n.type === 'end')!;
       return existing.id;
     }
 
@@ -821,14 +840,17 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     if (!clipboard || clipboard.nodes.length === 0) return [];
 
     const hasExistingStart = nodes.some((n) => n.type === 'start');
+    const hasExistingEnd = nodes.some((n) => n.type === 'end');
     const pasteableNodes = clipboard.nodes.filter(
-      (n) => !(n.type === 'start' && hasExistingStart)
+      (n) =>
+        !(n.type === 'start' && hasExistingStart) &&
+        !(n.type === 'end' && hasExistingEnd)
     );
 
     if (pasteableNodes.length === 0) {
       set({
         connectionError:
-          'Cannot paste another Start node (only one Start node is allowed).',
+          'Cannot paste another Start or End node when one already exists on the canvas.',
       });
       return [];
     }

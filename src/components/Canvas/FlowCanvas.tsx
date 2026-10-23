@@ -8,6 +8,16 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import {
+  mdiContentCopy,
+  mdiContentCut,
+  mdiContentDuplicate,
+  mdiContentPaste,
+  mdiHelpRhombusOutline,
+  mdiSelectAll,
+  mdiSourceBranch,
+  mdiTrashCanOutline,
+} from '@mdi/js';
+import {
   Background,
   BackgroundVariant,
   Controls,
@@ -28,6 +38,7 @@ import { StartNode } from '../nodes/StartNode';
 import { QuestionNode } from '../nodes/QuestionNode';
 import { OutcomeNode } from '../nodes/OutcomeNode';
 import { EndNode } from '../nodes/EndNode';
+import { MdiIcon } from '../MdiIcon';
 
 const nodeTypes: NodeTypes = {
   start: StartNode,
@@ -423,7 +434,10 @@ function FlowCanvasInner() {
                   setContextMenu(null);
                 }}
               >
-                <span>Cut</span>
+                <span className="context-item-label">
+                  <MdiIcon path={mdiContentCut} size={14} />
+                  <span>Cut</span>
+                </span>
                 <kbd>⌘X</kbd>
               </button>
 
@@ -435,7 +449,10 @@ function FlowCanvasInner() {
                   setContextMenu(null);
                 }}
               >
-                <span>Copy</span>
+                <span className="context-item-label">
+                  <MdiIcon path={mdiContentCopy} size={14} />
+                  <span>Copy</span>
+                </span>
                 <kbd>⌘C</kbd>
               </button>
 
@@ -447,7 +464,10 @@ function FlowCanvasInner() {
                   setContextMenu(null);
                 }}
               >
-                <span>Duplicate</span>
+                <span className="context-item-label">
+                  <MdiIcon path={mdiContentDuplicate} size={14} />
+                  <span>Duplicate</span>
+                </span>
                 <kbd>⌘D</kbd>
               </button>
             </>
@@ -462,11 +482,14 @@ function FlowCanvasInner() {
               setContextMenu(null);
             }}
           >
-            <span>
-              Paste
-              {clipboard && clipboard.nodes.length > 1
-                ? ` (${clipboard.nodes.length})`
-                : ''}
+            <span className="context-item-label">
+              <MdiIcon path={mdiContentPaste} size={14} />
+              <span>
+                Paste
+                {clipboard && clipboard.nodes.length > 1
+                  ? ` (${clipboard.nodes.length})`
+                  : ''}
+              </span>
             </span>
             <kbd>⌘V</kbd>
           </button>
@@ -485,7 +508,10 @@ function FlowCanvasInner() {
                   setContextMenu(null);
                 }}
               >
-                <span>+ Add Question Here</span>
+                <span className="context-item-label">
+                  <MdiIcon path={mdiHelpRhombusOutline} size={14} />
+                  <span>Add Question Here</span>
+                </span>
               </button>
               <button
                 type="button"
@@ -498,7 +524,10 @@ function FlowCanvasInner() {
                   setContextMenu(null);
                 }}
               >
-                <span>+ Add Outcome Here</span>
+                <span className="context-item-label">
+                  <MdiIcon path={mdiSourceBranch} size={14} />
+                  <span>Add Outcome Here</span>
+                </span>
               </button>
               <button
                 type="button"
@@ -508,7 +537,10 @@ function FlowCanvasInner() {
                   setContextMenu(null);
                 }}
               >
-                <span>Select All Nodes</span>
+                <span className="context-item-label">
+                  <MdiIcon path={mdiSelectAll} size={14} />
+                  <span>Select All Nodes</span>
+                </span>
                 <kbd>⌘A</kbd>
               </button>
             </>
@@ -526,11 +558,14 @@ function FlowCanvasInner() {
                   setContextMenu(null);
                 }}
               >
-                <span>
-                  Delete
-                  {deletableContextIds.length > 1
-                    ? ` (${deletableContextIds.length})`
-                    : ''}
+                <span className="context-item-label">
+                  <MdiIcon path={mdiTrashCanOutline} size={14} />
+                  <span>
+                    Delete
+                    {deletableContextIds.length > 1
+                      ? ` (${deletableContextIds.length})`
+                      : ''}
+                  </span>
                 </span>
                 <kbd>⌫</kbd>
               </button>

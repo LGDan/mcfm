@@ -1,3 +1,14 @@
+import {
+  mdiChevronDoubleLeft,
+  mdiChevronDoubleRight,
+  mdiContentCopy,
+  mdiContentCut,
+  mdiContentDuplicate,
+  mdiPlus,
+  mdiScaleBalance,
+  mdiTrashCanOutline,
+  mdiTuneVariant,
+} from '@mdi/js';
 import { useModelStore } from '../store/modelStore';
 import {
   formatCurrency,
@@ -5,6 +16,7 @@ import {
   type OutcomeFlowNode,
   type QuestionFlowNode,
 } from '../types/model';
+import { MdiIcon } from './MdiIcon';
 
 export function PropertiesPanel() {
   const nodes = useModelStore((s) => s.nodes);
@@ -13,6 +25,10 @@ export function PropertiesPanel() {
   const selectedNodeId = useModelStore((s) => s.selectedNodeId);
   const selectedEdgeId = useModelStore((s) => s.selectedEdgeId);
   const validation = useModelStore((s) => s.validation);
+  const propertiesCollapsed = useModelStore((s) => s.propertiesCollapsed);
+  const togglePropertiesCollapsed = useModelStore(
+    (s) => s.togglePropertiesCollapsed
+  );
 
   const updateNodeData = useModelStore((s) => s.updateNodeData);
   const deleteNodeById = useModelStore((s) => s.deleteNodeById);
@@ -29,6 +45,45 @@ export function PropertiesPanel() {
   const cutNodes = useModelStore((s) => s.cutNodes);
   const duplicateNodes = useModelStore((s) => s.duplicateNodes);
   const deleteSelected = useModelStore((s) => s.deleteSelected);
+
+  if (propertiesCollapsed) {
+    return (
+      <aside className="properties-sidebar is-collapsed">
+        <button
+          type="button"
+          className="pane-collapse-btn"
+          onClick={togglePropertiesCollapsed}
+          title="Expand Properties Inspector"
+          aria-label="Expand Properties Inspector"
+        >
+          <MdiIcon path={mdiChevronDoubleLeft} size={16} />
+        </button>
+        <div className="collapsed-rail-icons">
+          <button
+            type="button"
+            className="rail-icon-btn"
+            onClick={togglePropertiesCollapsed}
+            title="Inspect Selected Node / Edge"
+          >
+            <MdiIcon path={mdiTuneVariant} size={16} />
+          </button>
+        </div>
+        <div className="collapsed-vertical-label">PROPERTIES</div>
+      </aside>
+    );
+  }
+
+  const collapseBtn = (
+    <button
+      type="button"
+      className="pane-collapse-btn"
+      onClick={togglePropertiesCollapsed}
+      title="Collapse Properties Inspector"
+      aria-label="Collapse Properties Inspector"
+    >
+      <MdiIcon path={mdiChevronDoubleRight} size={15} />
+    </button>
+  );
 
   const currencySymbol = getCurrencySymbol(currency);
   const selectedNodes = nodes.filter((n) => n.selected);
@@ -47,11 +102,9 @@ export function PropertiesPanel() {
         <div className="sidebar-section">
           <div className="prop-header-row">
             <span className="flow-node-badge badge-question">
-              MULTI-SELECT
+              MULTI-SELECT ({selectedNodes.length})
             </span>
-            <span className="prob-sum-pill pill-ok">
-              {selectedNodes.length} nodes
-            </span>
+            {collapseBtn}
           </div>
           <p className="sidebar-hint">
             Tip: Shift/Cmd+Click nodes or drag a selection box on the canvas.
@@ -61,32 +114,36 @@ export function PropertiesPanel() {
           <div className="prop-button-group" style={{ marginBottom: 14 }}>
             <button
               type="button"
-              className="btn btn-secondary btn-full"
+              className="btn btn-secondary btn-full btn-with-icon"
               onClick={() => copyNodes()}
             >
-              Copy Selected ({selectedNodes.length})
+              <MdiIcon path={mdiContentCopy} size={14} />
+              <span>Copy Selected ({selectedNodes.length})</span>
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-full"
+              className="btn btn-ghost btn-full btn-with-icon"
               onClick={() => duplicateNodes()}
             >
-              Duplicate Selected
+              <MdiIcon path={mdiContentDuplicate} size={14} />
+              <span>Duplicate Selected</span>
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-full"
+              className="btn btn-ghost btn-full btn-with-icon"
               onClick={() => cutNodes()}
             >
-              Cut Selected
+              <MdiIcon path={mdiContentCut} size={14} />
+              <span>Cut Selected</span>
             </button>
             {deletableCount > 0 && (
               <button
                 type="button"
-                className="btn btn-danger btn-full"
+                className="btn btn-danger btn-full btn-with-icon"
                 onClick={() => deleteSelected()}
               >
-                Delete Selected ({deletableCount})
+                <MdiIcon path={mdiTrashCanOutline} size={14} />
+                <span>Delete Selected ({deletableCount})</span>
               </button>
             )}
           </div>
@@ -113,7 +170,10 @@ export function PropertiesPanel() {
     return (
       <aside className="properties-sidebar">
         <div className="sidebar-section">
-          <h2 className="sidebar-heading">Properties</h2>
+          <div className="pane-header-row">
+            <h2 className="sidebar-heading">Properties</h2>
+            {collapseBtn}
+          </div>
           <p className="sidebar-empty">
             Select any node or link on the canvas to inspect and edit its
             parameters, probabilities, and cost impact.
@@ -131,7 +191,10 @@ export function PropertiesPanel() {
     return (
       <aside className="properties-sidebar">
         <div className="sidebar-section">
-          <h2 className="sidebar-heading">Link Properties</h2>
+          <div className="pane-header-row">
+            <h2 className="sidebar-heading">Link Properties</h2>
+            {collapseBtn}
+          </div>
           <div className="prop-field">
             <label>Connection Type</label>
             <div className="prop-readonly-box">
@@ -165,10 +228,11 @@ export function PropertiesPanel() {
 
           <button
             type="button"
-            className="btn btn-danger btn-full"
+            className="btn btn-danger btn-full btn-with-icon"
             onClick={() => deleteEdgeById(selectedEdge.id)}
           >
-            Delete Link
+            <MdiIcon path={mdiTrashCanOutline} size={14} />
+            <span>Delete Link</span>
           </button>
         </div>
       </aside>
@@ -202,14 +266,18 @@ export function PropertiesPanel() {
         <div className="sidebar-section">
           <div className="prop-header-row">
             <span className="flow-node-badge badge-question">QUESTION</span>
-            <button
-              type="button"
-              className="btn-icon-danger"
-              onClick={() => deleteNodeById(qNode.id)}
-              title="Delete Question node"
-            >
-              Delete
-            </button>
+            <div className="prop-header-actions">
+              <button
+                type="button"
+                className="btn-icon-danger"
+                onClick={() => deleteNodeById(qNode.id)}
+                title="Delete Question node"
+              >
+                <MdiIcon path={mdiTrashCanOutline} size={13} />
+                <span>Delete</span>
+              </button>
+              {collapseBtn}
+            </div>
           </div>
 
           <div className="prop-field">
@@ -346,18 +414,20 @@ export function PropertiesPanel() {
           <div className="prop-button-group">
             <button
               type="button"
-              className="btn btn-secondary btn-full"
+              className="btn btn-secondary btn-full btn-with-icon"
               onClick={() => addOutcomeForQuestion(qNode.id)}
             >
-              + Add Outcome Branch
+              <MdiIcon path={mdiPlus} size={14} />
+              <span>Add Outcome Branch</span>
             </button>
             {childOutcomes.length > 0 && (
               <button
                 type="button"
-                className="btn btn-ghost btn-full"
+                className="btn btn-ghost btn-full btn-with-icon"
                 onClick={() => splitQuestionProbabilitiesEvenly(qNode.id)}
               >
-                Split 100% Evenly
+                <MdiIcon path={mdiScaleBalance} size={14} />
+                <span>Split 100% Evenly</span>
               </button>
             )}
           </div>
@@ -365,7 +435,7 @@ export function PropertiesPanel() {
 
         {andQuestions.length > 0 && (
           <div className="sidebar-section">
-            <h3 className="sidebar-subheading">Linked AND Questions</h3>
+            <h3 className="sidebar-subheading">Linked Questions</h3>
             <p className="sidebar-hint">
               Always evaluated alongside this question:
             </p>
@@ -377,7 +447,7 @@ export function PropertiesPanel() {
                   className="linked-q-chip"
                   onClick={() => selectNode(aq.id)}
                 >
-                  AND → {aq.data.label}
+                  ALL → {aq.data.label}
                 </button>
               ))}
             </div>
@@ -405,13 +475,17 @@ export function PropertiesPanel() {
         <div className="sidebar-section">
           <div className="prop-header-row">
             <span className="flow-node-badge badge-outcome">OUTCOME (OR)</span>
-            <button
-              type="button"
-              className="btn-icon-danger"
-              onClick={() => deleteNodeById(oNode.id)}
-            >
-              Delete
-            </button>
+            <div className="prop-header-actions">
+              <button
+                type="button"
+                className="btn-icon-danger"
+                onClick={() => deleteNodeById(oNode.id)}
+              >
+                <MdiIcon path={mdiTrashCanOutline} size={13} />
+                <span>Delete</span>
+              </button>
+              {collapseBtn}
+            </div>
           </div>
 
           {parentQuestion && (
@@ -514,15 +588,19 @@ export function PropertiesPanel() {
           <span className="flow-node-badge">
             {selectedNode.type?.toUpperCase()}
           </span>
-          {selectedNode.type !== 'start' && (
-            <button
-              type="button"
-              className="btn-icon-danger"
-              onClick={() => deleteNodeById(selectedNode.id)}
-            >
-              Delete
-            </button>
-          )}
+          <div className="prop-header-actions">
+            {selectedNode.type !== 'start' && (
+              <button
+                type="button"
+                className="btn-icon-danger"
+                onClick={() => deleteNodeById(selectedNode.id)}
+              >
+                <MdiIcon path={mdiTrashCanOutline} size={13} />
+                <span>Delete</span>
+              </button>
+            )}
+            {collapseBtn}
+          </div>
         </div>
         <div className="prop-field">
           <label htmlFor="node-label">Label</label>

@@ -1,12 +1,24 @@
 import type { DragEvent } from 'react';
+import {
+  mdiAlertCircleOutline,
+  mdiAlertOutline,
+  mdiChevronDoubleLeft,
+  mdiChevronDoubleRight,
+  mdiFlagCheckered,
+  mdiHelpRhombusOutline,
+  mdiPlayCircleOutline,
+  mdiSourceBranch,
+} from '@mdi/js';
 import { useModelStore } from '../store/modelStore';
 import type { ModelNodeType } from '../types/model';
+import { MdiIcon } from './MdiIcon';
 
 interface PaletteItem {
   type: ModelNodeType;
   title: string;
   subtitle: string;
   accentClass: string;
+  icon: string;
 }
 
 const PALETTE_ITEMS: PaletteItem[] = [
@@ -15,62 +27,152 @@ const PALETTE_ITEMS: PaletteItem[] = [
     title: 'Start Node',
     subtitle: 'Single project entry point',
     accentClass: 'palette-start',
+    icon: mdiPlayCircleOutline,
   },
   {
     type: 'question',
     title: 'Question Node',
     subtitle: 'Decision / risk point',
     accentClass: 'palette-question',
+    icon: mdiHelpRhombusOutline,
   },
   {
     type: 'outcome',
     title: 'Outcome Node (OR)',
     subtitle: 'Probability % & fixed cost',
     accentClass: 'palette-outcome',
+    icon: mdiSourceBranch,
   },
   {
     type: 'end',
     title: 'End Node',
     subtitle: 'Pathway terminal leaf',
     accentClass: 'palette-end',
+    icon: mdiFlagCheckered,
   },
 ];
 
 export function Toolbox() {
+  const nodes = useModelStore((s) => s.nodes);
   const addNode = useModelStore((s) => s.addNode);
   const validation = useModelStore((s) => s.validation);
   const selectNode = useModelStore((s) => s.selectNode);
+  const toolboxCollapsed = useModelStore((s) => s.toolboxCollapsed);
+  const toggleToolboxCollapsed = useModelStore(
+    (s) => s.toggleToolboxCollapsed
+  );
+
+  const hasStartNode = nodes.some((n) => n.type === 'start');
+  const hasEndNode = nodes.some((n) => n.type === 'end');
+
+  const isItemDisabled = (type: ModelNodeType) => {
+    if (type === 'start' && hasStartNode) return true;
+    if (type === 'end' && hasEndNode) return true;
+    return false;
+  };
 
   const onDragStart = (
     event: DragEvent<HTMLButtonElement>,
     nodeType: ModelNodeType
   ) => {
+    if (isItemDisabled(nodeType)) {
+      event.preventDefault();
+      return;
+    }
     event.dataTransfer.setData('application/mc-modeller-node', nodeType);
     event.dataTransfer.effectAllowed = 'move';
   };
 
+  if (toolboxCollapsed) {
+    return (
+      <aside className="toolbox-sidebar is-collapsed">
+        <button
+          type="button"
+          className="pane-collapse-btn"
+          onClick={toggleToolboxCollapsed}
+          title="Expand Toolbox"
+          aria-label="Expand Toolbox"
+        >
+          <MdiIcon path={mdiChevronDoubleRight} size={16} />
+        </button>
+        <div className="collapsed-rail-icons">
+          {PALETTE_ITEMS.map((item) => {
+            const disabled = isItemDisabled(item.type);
+            return (
+              <button
+                key={item.type}
+                type="button"
+                disabled={disabled}
+                draggable={!disabled}
+                onDragStart={(e) => onDragStart(e, item.type)}
+                onClick={() => !disabled && addNode(item.type)}
+                className="rail-icon-btn"
+                title={
+                  disabled
+                    ? `${item.title} (already on canvas)`
+                    : `Add ${item.title}`
+                }
+              >
+                <MdiIcon path={item.icon} size={16} />
+              </button>
+            );
+          })}
+        </div>
+        <div className="collapsed-vertical-label">TOOLBOX</div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="toolbox-sidebar">
       <div className="sidebar-section">
-        <h2 className="sidebar-heading">Toolbox</h2>
+        <div className="pane-header-row">
+          <h2 className="sidebar-heading">Toolbox</h2>
+          <button
+            type="button"
+            className="pane-collapse-btn"
+            onClick={toggleToolboxCollapsed}
+            title="Collapse Toolbox"
+            aria-label="Collapse Toolbox"
+          >
+            <MdiIcon path={mdiChevronDoubleLeft} size={15} />
+          </button>
+        </div>
         <p className="sidebar-hint">
-          Drag onto the canvas or click to add a node.
+          Drag onto the canvas or click to place a node.
         </p>
 
         <div className="palette-list">
-          {PALETTE_ITEMS.map((item) => (
-            <button
-              key={item.type}
-              type="button"
-              draggable
-              onDragStart={(e) => onDragStart(e, item.type)}
-              onClick={() => addNode(item.type)}
-              className={`palette-card ${item.accentClass}`}
-            >
-              <div className="palette-card-title">+ {item.title}</div>
-              <div className="palette-card-sub">{item.subtitle}</div>
-            </button>
-          ))}
+          {PALETTE_ITEMS.map((item) => {
+            const disabled = isItemDisabled(item.type);
+            return (
+              <button
+                key={item.type}
+                type="button"
+                disabled={disabled}
+                draggable={!disabled}
+                onDragStart={(e) => onDragStart(e, item.type)}
+                onClick={() => !disabled && addNode(item.type)}
+                className={`palette-card ${item.accentClass} ${
+                  disabled ? 'is-disabled' : ''
+                }`}
+                title={
+                  disabled
+                    ? `${item.title} is already present on the canvas`
+                    : `Drag or click to add ${item.title}`
+                }
+              >
+                <div className="palette-card-header">
+                  <MdiIcon path={item.icon} size={16} />
+                  <span className="palette-card-title">{item.title}</span>
+                  {disabled && (
+                    <span className="palette-placed-tag">Placed</span>
+                  )}
+                </div>
+                <div className="palette-card-sub">{item.subtitle}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -106,7 +208,11 @@ export function Toolbox() {
               className="validation-item is-error"
               onClick={() => err.nodeId && selectNode(err.nodeId)}
             >
-              <span className="v-dot" />
+              <MdiIcon
+                path={mdiAlertCircleOutline}
+                size={14}
+                className="v-icon"
+              />
               <span>{err.message}</span>
             </button>
           ))}
@@ -117,7 +223,7 @@ export function Toolbox() {
               className="validation-item is-warning"
               onClick={() => warn.nodeId && selectNode(warn.nodeId)}
             >
-              <span className="v-dot" />
+              <MdiIcon path={mdiAlertOutline} size={14} className="v-icon" />
               <span>{warn.message}</span>
             </button>
           ))}

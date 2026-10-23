@@ -30,6 +30,12 @@ const STORAGE_KEY = 'mc-modeller:v1';
 
 export type ActiveTab = 'editor' | 'results';
 
+export interface ClipboardPayload {
+  nodes: ModelNode[];
+  edges: ModelEdge[];
+  pasteCount: number;
+}
+
 export function decorateEdge(
   edge: ModelEdge,
   nodes: ModelNode[]
@@ -145,6 +151,24 @@ function persistDraft(
   }
 }
 
+function resolveTargetNodeIds(
+  nodes: ModelNode[],
+  selectedNodeId: string | null,
+  explicitNodeIds?: string[]
+): Set<string> {
+  if (explicitNodeIds && explicitNodeIds.length > 0) {
+    return new Set(explicitNodeIds);
+  }
+  const flowSelected = nodes.filter((n) => n.selected).map((n) => n.id);
+  if (flowSelected.length > 0) {
+    return new Set(flowSelected);
+  }
+  if (selectedNodeId) {
+    return new Set([selectedNodeId]);
+  }
+  return new Set();
+}
+
 interface ModelStoreState {
   modelName: string;
   currency: CurrencyCode;
@@ -152,6 +176,7 @@ interface ModelStoreState {
   edges: ModelEdge[];
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
+  clipboard: ClipboardPayload | null;
   activeTab: ActiveTab;
   trials: number;
   validation: ValidationResult;
@@ -170,14 +195,21 @@ interface ModelStoreState {
   onNodesChange: (changes: NodeChange<ModelNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ModelEdge>[]) => void;
   onConnect: (connection: Connection) => void;
-  selectNode: (nodeId: string | null) => void;
+  selectNode: (nodeId: string | null, additive?: boolean) => void;
   selectEdge: (edgeId: string | null) => void;
+  selectAllNodes: () => void;
 
   addNode: (type: ModelNodeType, position?: { x: number; y: number }) => string;
   updateNodeData: (nodeId: string, patch: Record<string, unknown>) => void;
   deleteSelected: () => void;
+  deleteNodesByIds: (nodeIds: string[]) => void;
   deleteNodeById: (nodeId: string) => void;
   deleteEdgeById: (edgeId: string) => void;
+
+  copyNodes: (explicitNodeIds?: string[]) => number;
+  cutNodes: (explicitNodeIds?: string[]) => number;
+  pasteClipboard: (anchorPosition?: { x: number; y: number }) => string[];
+  duplicateNodes: (explicitNodeIds?: string[]) => string[];
 
   addOutcomeForQuestion: (questionId: string) => void;
   splitQuestionProbabilitiesEvenly: (questionId: string) => void;
@@ -209,6 +241,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   edges: initialModel.edges,
   selectedNodeId: null,
   selectedEdgeId: null,
+  clipboard: null,
   activeTab: 'editor',
   trials: 10000,
   validation: initialValidation,
@@ -230,7 +263,6 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
 
   setCurrency: (currency) => {
     const { modelName, nodes, edges, simulationResult } = get();
-    // Relabel histogram bins if a simulation result is already present
     const updatedSim: SimulationResult | null = simulationResult
       ? {
           ...simulationResult,
@@ -262,15 +294,33 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     const nextEdges = hydrateEdges(nextNodes, get().edges);
     const validation = validateModel(nextNodes, nextEdges);
 
-    const selectedNodeId = get().selectedNodeId;
-    const stillExists =
-      selectedNodeId && nextNodes.some((n) => n.id === selectedNodeId);
+    const selectedNodes = nextNodes.filter((n) => n.selected);
+    const prevSelectedId = get().selectedNodeId;
+
+    let nextSelectedId: string | null = null;
+    if (selectedNodes.length === 1) {
+      nextSelectedId = selectedNodes[0].id;
+    } else if (
+      selectedNodes.length > 1 &&
+      prevSelectedId &&
+      selectedNodes.some((n) => n.id === prevSelectedId)
+    ) {
+      nextSelectedId = prevSelectedId;
+    } else if (selectedNodes.length > 1) {
+      nextSelectedId = selectedNodes[selectedNodes.length - 1].id;
+    } else if (
+      prevSelectedId &&
+      nextNodes.some((n) => n.id === prevSelectedId) &&
+      !changes.some((c) => c.type === 'select')
+    ) {
+      nextSelectedId = prevSelectedId;
+    }
 
     set({
       nodes: nextNodes,
       edges: nextEdges,
       validation,
-      selectedNodeId: stillExists ? selectedNodeId : null,
+      selectedNodeId: nextSelectedId,
     });
     persistDraft(get().modelName, get().currency, nextNodes, nextEdges);
   },
@@ -326,11 +376,50 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     persistDraft(modelName, currency, nodes, nextEdges);
   },
 
-  selectNode: (nodeId) =>
-    set({ selectedNodeId: nodeId, selectedEdgeId: null }),
+  selectNode: (nodeId, additive = false) => {
+    const { nodes, edges } = get();
+    if (!nodeId) {
+      set({
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        nodes: nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
+        edges: edges.map((e) => (e.selected ? { ...e, selected: false } : e)),
+      });
+      return;
+    }
 
-  selectEdge: (edgeId) =>
-    set({ selectedEdgeId: edgeId, selectedNodeId: null }),
+    const nextNodes = nodes.map((n) => {
+      if (n.id === nodeId) {
+        return { ...n, selected: additive ? !n.selected : true };
+      }
+      return additive ? n : n.selected ? { ...n, selected: false } : n;
+    });
+
+    set({
+      nodes: nextNodes,
+      selectedNodeId: nodeId,
+      selectedEdgeId: null,
+    });
+  },
+
+  selectEdge: (edgeId) => {
+    const { nodes, edges } = get();
+    set({
+      selectedEdgeId: edgeId,
+      selectedNodeId: null,
+      nodes: nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
+      edges: edges.map((e) => ({ ...e, selected: e.id === edgeId })),
+    });
+  },
+
+  selectAllNodes: () => {
+    const { nodes } = get();
+    set({
+      nodes: nodes.map((n) => ({ ...n, selected: true })),
+      selectedNodeId: nodes[0]?.id ?? null,
+      selectedEdgeId: null,
+    });
+  },
 
   addNode: (type, position) => {
     const { nodes, edges, modelName, currency } = get();
@@ -357,6 +446,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         id,
         type: 'start',
         position: pos,
+        selected: true,
         data: { label: 'Project Start' },
       };
     } else if (type === 'question') {
@@ -364,6 +454,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         id,
         type: 'question',
         position: pos,
+        selected: true,
         data: {
           label: `Question ${countOfType}`,
           description: 'What is the uncertainty or decision at this stage?',
@@ -374,6 +465,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         id,
         type: 'outcome',
         position: pos,
+        selected: true,
         data: {
           label: `Outcome ${countOfType}`,
           description: '',
@@ -386,11 +478,15 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         id,
         type: 'end',
         position: pos,
+        selected: true,
         data: { label: 'End' },
       };
     }
 
-    const nextNodes = [...nodes, newNode];
+    const deselectedNodes = nodes.map((n) =>
+      n.selected ? { ...n, selected: false } : n
+    );
+    const nextNodes = [...deselectedNodes, newNode];
     const validation = validateModel(nextNodes, edges);
     set({
       nodes: nextNodes,
@@ -422,20 +518,39 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   },
 
   deleteSelected: () => {
-    const { selectedNodeId, selectedEdgeId } = get();
-    if (selectedNodeId) {
-      get().deleteNodeById(selectedNodeId);
-    } else if (selectedEdgeId) {
-      get().deleteEdgeById(selectedEdgeId);
+    const { nodes, edges, selectedNodeId, selectedEdgeId } = get();
+    const targetNodeIds = resolveTargetNodeIds(nodes, selectedNodeId);
+    if (targetNodeIds.size > 0) {
+      get().deleteNodesByIds(Array.from(targetNodeIds));
+      return;
+    }
+    const selectedEdgeIds = edges
+      .filter((e) => e.selected || e.id === selectedEdgeId)
+      .map((e) => e.id);
+    if (selectedEdgeIds.length > 0) {
+      const removeSet = new Set(selectedEdgeIds);
+      const nextEdges = hydrateEdges(
+        nodes,
+        edges.filter((e) => !removeSet.has(e.id))
+      );
+      const validation = validateModel(nodes, nextEdges);
+      set({
+        edges: nextEdges,
+        validation,
+        selectedEdgeId: null,
+      });
+      persistDraft(get().modelName, get().currency, nodes, nextEdges);
     }
   },
 
-  deleteNodeById: (nodeId) => {
+  deleteNodesByIds: (nodeIds) => {
+    if (nodeIds.length === 0) return;
     const { nodes, edges, modelName, currency } = get();
-    const nextNodes = nodes.filter((n) => n.id !== nodeId);
+    const removeSet = new Set(nodeIds);
+    const nextNodes = nodes.filter((n) => !removeSet.has(n.id));
     const nextEdges = hydrateEdges(
       nextNodes,
-      edges.filter((e) => e.source !== nodeId && e.target !== nodeId)
+      edges.filter((e) => !removeSet.has(e.source) && !removeSet.has(e.target))
     );
     const validation = validateModel(nextNodes, nextEdges);
     set({
@@ -443,8 +558,13 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       edges: nextEdges,
       validation,
       selectedNodeId: null,
+      selectedEdgeId: null,
     });
     persistDraft(modelName, currency, nextNodes, nextEdges);
+  },
+
+  deleteNodeById: (nodeId) => {
+    get().deleteNodesByIds([nodeId]);
   },
 
   deleteEdgeById: (edgeId) => {
@@ -460,6 +580,166 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       selectedEdgeId: null,
     });
     persistDraft(modelName, currency, nodes, nextEdges);
+  },
+
+  copyNodes: (explicitNodeIds) => {
+    const { nodes, edges, selectedNodeId } = get();
+    const targetIds = resolveTargetNodeIds(
+      nodes,
+      selectedNodeId,
+      explicitNodeIds
+    );
+    // Exclude 'start' if another start exists; only copyable nodes are question/outcome/end (or start if none exists on paste)
+    const copiedNodes = nodes
+      .filter((n) => targetIds.has(n.id))
+      .map((n) => structuredClone(n));
+
+    if (copiedNodes.length === 0) return 0;
+
+    const copiedEdges = edges
+      .filter((e) => targetIds.has(e.source) && targetIds.has(e.target))
+      .map((e) => structuredClone(e));
+
+    set({
+      clipboard: {
+        nodes: copiedNodes,
+        edges: copiedEdges,
+        pasteCount: 0,
+      },
+    });
+    return copiedNodes.length;
+  },
+
+  cutNodes: (explicitNodeIds) => {
+    const { nodes, selectedNodeId } = get();
+    const targetIds = resolveTargetNodeIds(
+      nodes,
+      selectedNodeId,
+      explicitNodeIds
+    );
+    if (targetIds.size === 0) return 0;
+
+    const count = get().copyNodes(Array.from(targetIds));
+    // Keep Start node if user accidentally cut everything, or allow cutting non-start nodes
+    const deletableIds = Array.from(targetIds).filter((id) => {
+      const n = nodes.find((node) => node.id === id);
+      return n?.type !== 'start';
+    });
+
+    if (deletableIds.length < targetIds.size && deletableIds.length === 0) {
+      set({
+        connectionError: 'The Start node cannot be cut or deleted.',
+      });
+      return count;
+    }
+
+    get().deleteNodesByIds(deletableIds);
+    return count;
+  },
+
+  pasteClipboard: (anchorPosition) => {
+    const { clipboard, nodes, edges, modelName, currency } = get();
+    if (!clipboard || clipboard.nodes.length === 0) return [];
+
+    const hasExistingStart = nodes.some((n) => n.type === 'start');
+    const pasteableNodes = clipboard.nodes.filter(
+      (n) => !(n.type === 'start' && hasExistingStart)
+    );
+
+    if (pasteableNodes.length === 0) {
+      set({
+        connectionError:
+          'Cannot paste another Start node (only one Start node is allowed).',
+      });
+      return [];
+    }
+
+    const nextPasteCount = clipboard.pasteCount + 1;
+    const minX = Math.min(...pasteableNodes.map((n) => n.position.x));
+    const minY = Math.min(...pasteableNodes.map((n) => n.position.y));
+
+    const dx = anchorPosition
+      ? anchorPosition.x - minX
+      : 45 * nextPasteCount;
+    const dy = anchorPosition
+      ? anchorPosition.y - minY
+      : 45 * nextPasteCount;
+
+    const idMap = new Map<string, string>();
+    const createdNodes: ModelNode[] = pasteableNodes.map((orig) => {
+      const newId = `${orig.type}-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      idMap.set(orig.id, newId);
+      const cloneData = structuredClone(orig.data);
+      if (
+        typeof cloneData.label === 'string' &&
+        !cloneData.label.endsWith(' (Copy)')
+      ) {
+        cloneData.label = `${cloneData.label} (Copy)`;
+      }
+      return {
+        ...structuredClone(orig),
+        id: newId,
+        selected: true,
+        position: {
+          x: Math.round(orig.position.x + dx),
+          y: Math.round(orig.position.y + dy),
+        },
+        data: cloneData,
+      } as ModelNode;
+    });
+
+    const deselectedExisting = nodes.map((n) =>
+      n.selected ? { ...n, selected: false } : n
+    );
+    const nextNodes = [...deselectedExisting, ...createdNodes];
+
+    const createdEdges: ModelEdge[] = clipboard.edges
+      .filter((e) => idMap.has(e.source) && idMap.has(e.target))
+      .map((origEdge) => {
+        const newSource = idMap.get(origEdge.source)!;
+        const newTarget = idMap.get(origEdge.target)!;
+        return decorateEdge(
+          {
+            ...structuredClone(origEdge),
+            id: `e-${newSource}-${newTarget}-${Math.random()
+              .toString(36)
+              .slice(2, 6)}`,
+            source: newSource,
+            target: newTarget,
+            selected: false,
+          },
+          nextNodes
+        );
+      });
+
+    const nextEdges = [...edges, ...createdEdges];
+    const validation = validateModel(nextNodes, nextEdges);
+
+    set({
+      nodes: nextNodes,
+      edges: nextEdges,
+      validation,
+      selectedNodeId:
+        createdNodes.length === 1
+          ? createdNodes[0].id
+          : createdNodes[createdNodes.length - 1]?.id ?? null,
+      selectedEdgeId: null,
+      clipboard: {
+        ...clipboard,
+        pasteCount: nextPasteCount,
+      },
+      connectionError: null,
+    });
+    persistDraft(modelName, currency, nextNodes, nextEdges);
+    return createdNodes.map((n) => n.id);
+  },
+
+  duplicateNodes: (explicitNodeIds) => {
+    const copied = get().copyNodes(explicitNodeIds);
+    if (copied === 0) return [];
+    return get().pasteClipboard();
   },
 
   addOutcomeForQuestion: (questionId) => {
@@ -619,6 +899,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         position: { x: 640, y: 120 },
         data: {
           label: 'Standard Delivery',
+          description: '',
           probabilityPct: 70,
           cost: 50000,
         },
@@ -629,6 +910,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         position: { x: 640, y: 250 },
         data: {
           label: 'Accelerated Delivery',
+          description: '',
           probabilityPct: 30,
           cost: 95000,
         },

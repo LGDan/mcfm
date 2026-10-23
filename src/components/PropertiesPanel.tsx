@@ -22,10 +22,89 @@ export function PropertiesPanel() {
   const splitQuestionProbabilitiesEvenly = useModelStore(
     (s) => s.splitQuestionProbabilitiesEvenly
   );
+  const copyNodes = useModelStore((s) => s.copyNodes);
+  const cutNodes = useModelStore((s) => s.cutNodes);
+  const duplicateNodes = useModelStore((s) => s.duplicateNodes);
+  const deleteSelected = useModelStore((s) => s.deleteSelected);
 
   const currencySymbol = getCurrencySymbol(currency);
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
+  const selectedNodes = nodes.filter((n) => n.selected);
+  const selectedNode =
+    nodes.find((n) => n.id === selectedNodeId) ??
+    (selectedNodes.length === 1 ? selectedNodes[0] : null);
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId) ?? null;
+
+  if (selectedNodes.length > 1) {
+    const deletableCount = selectedNodes.filter(
+      (n) => n.type !== 'start'
+    ).length;
+
+    return (
+      <aside className="properties-sidebar">
+        <div className="sidebar-section">
+          <div className="prop-header-row">
+            <span className="flow-node-badge badge-question">
+              MULTI-SELECT
+            </span>
+            <span className="prob-sum-pill pill-ok">
+              {selectedNodes.length} nodes
+            </span>
+          </div>
+          <p className="sidebar-hint">
+            Tip: Shift/Cmd+Click nodes or drag a selection box on the canvas.
+            Right-click any selected node for the context menu.
+          </p>
+
+          <div className="prop-button-group" style={{ marginBottom: 14 }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-full"
+              onClick={() => copyNodes()}
+            >
+              Copy Selected ({selectedNodes.length})
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-full"
+              onClick={() => duplicateNodes()}
+            >
+              Duplicate Selected
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-full"
+              onClick={() => cutNodes()}
+            >
+              Cut Selected
+            </button>
+            {deletableCount > 0 && (
+              <button
+                type="button"
+                className="btn btn-danger btn-full"
+                onClick={() => deleteSelected()}
+              >
+                Delete Selected ({deletableCount})
+              </button>
+            )}
+          </div>
+
+          <h3 className="sidebar-subheading">Selected Nodes</h3>
+          <div className="linked-q-list">
+            {selectedNodes.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                className="linked-q-chip"
+                onClick={() => selectNode(n.id, false)}
+              >
+                [{n.type?.toUpperCase()}] {n.data.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   if (!selectedNode && !selectedEdge) {
     return (

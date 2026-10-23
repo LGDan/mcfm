@@ -117,6 +117,37 @@ body,
   gap: 6px;
 }
 
+.view-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.view-mode-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.view-mode-btn:hover {
+  color: var(--text-main);
+}
+
+.view-mode-btn.is-active {
+  background: rgba(99, 102, 241, 0.25);
+  color: #c7d2fe;
+}
+
 .layout-select {
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
@@ -614,8 +645,146 @@ body,
   border-color: #6366f1;
 }
 
+.flow-node-question.is-nested-mode {
+  min-width: 265px;
+  max-width: 300px;
+}
+
 .flow-node-question.has-warning {
   border-color: #f59e0b;
+}
+
+.nested-outcomes-container {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.nested-outcomes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.nested-and-hint {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.nested-outcomes-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px dashed #334155;
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+}
+
+.nested-outcomes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nested-outcome-card {
+  position: relative;
+  background: linear-gradient(180deg, #0c2a40 0%, #0b1528 100%);
+  border: 1px solid rgba(14, 165, 233, 0.45);
+  border-radius: 7px;
+  padding: 7px 14px 7px 9px;
+  cursor: pointer;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.nested-outcome-card:hover {
+  border-color: #38bdf8;
+}
+
+.nested-outcome-card.is-selected {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
+}
+
+.nested-outcome-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.nested-outcome-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.nested-outcome-prob {
+  font-size: 11px;
+  font-weight: 800;
+  color: #38bdf8;
+  background: rgba(14, 165, 233, 0.16);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.nested-outcome-desc {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+
+.nested-outcome-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+}
+
+.nested-outcome-cost-label {
+  color: var(--text-muted);
+}
+
+.nested-outcome-cost {
+  font-weight: 700;
+  color: #34d399;
+}
+
+.flow-handle-outcome-child {
+  right: -19px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 11px !important;
+  height: 11px !important;
+  background: #0ea5e9 !important;
+  border: 2px solid #090d16 !important;
+  z-index: 15 !important;
+}
+
+.flow-handle-question-and {
+  top: 22px !important;
+  background: #f59e0b !important;
+  z-index: 15 !important;
+}
+
+/* Ensure React Flow edges render cleanly above node backgrounds so paths are never hidden */
+.react-flow__edges {
+  z-index: 4 !important;
+}
+
+.react-flow__nodes {
+  z-index: 2 !important;
+}
+
+.react-flow__edge-labels {
+  z-index: 6 !important;
 }
 
 .flow-node-outcome {

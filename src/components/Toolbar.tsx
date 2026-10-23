@@ -23,6 +23,8 @@ export function Toolbar() {
   const runSimulation = useModelStore((s) => s.runSimulation);
   const layoutAlgorithm = useModelStore((s) => s.layoutAlgorithm);
   const setLayoutAlgorithm = useModelStore((s) => s.setLayoutAlgorithm);
+  const outcomeDisplayMode = useModelStore((s) => s.outcomeDisplayMode);
+  const setOutcomeDisplayMode = useModelStore((s) => s.setOutcomeDisplayMode);
   const autoLayout = useModelStore((s) => s.autoLayout);
   const resetToNewModel = useModelStore((s) => s.resetToNewModel);
   const loadDemoModel = useModelStore((s) => s.loadDemoModel);
@@ -144,6 +146,33 @@ export function Toolbar() {
 
         {activeTab === 'editor' && (
           <div className="layout-control-group">
+            <div
+              className="view-mode-toggle"
+              role="group"
+              aria-label="Outcome display mode"
+            >
+              <button
+                type="button"
+                className={`view-mode-btn ${
+                  outcomeDisplayMode === 'separate' ? 'is-active' : ''
+                }`}
+                onClick={() => setOutcomeDisplayMode('separate')}
+                title="Show Outcomes as separate nodes on the canvas"
+              >
+                Separate Nodes
+              </button>
+              <button
+                type="button"
+                className={`view-mode-btn ${
+                  outcomeDisplayMode === 'nested' ? 'is-active' : ''
+                }`}
+                onClick={() => setOutcomeDisplayMode('nested')}
+                title="Show Outcomes nested inside their parent Question node"
+              >
+                Nested Outcomes
+              </button>
+            </div>
+
             <select
               className="layout-select"
               value={layoutAlgorithm}

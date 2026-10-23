@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -15,12 +16,13 @@ import {
   ReactFlowProvider,
   SelectionMode,
   useReactFlow,
+  useUpdateNodeInternals,
   type IsValidConnection,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useModelStore } from '../../store/modelStore';
-import type { ModelNode, ModelNodeType } from '../../types/model';
+import type { ModelEdge, ModelNode, ModelNodeType } from '../../types/model';
 import { canConnectNodes } from '../../sim/validate';
 import { StartNode } from '../nodes/StartNode';
 import { QuestionNode } from '../nodes/QuestionNode';
@@ -45,10 +47,12 @@ interface ContextMenuState {
 function FlowCanvasInner() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   const nodes = useModelStore((s) => s.nodes);
   const edges = useModelStore((s) => s.edges);
+  const outcomeDisplayMode = useModelStore((s) => s.outcomeDisplayMode);
   const clipboard = useModelStore((s) => s.clipboard);
   const layoutVersion = useModelStore((s) => s.layoutVersion);
   const onNodesChange = useModelStore((s) => s.onNodesChange);
@@ -67,11 +71,92 @@ function FlowCanvasInner() {
   const connectionError = useModelStore((s) => s.connectionError);
   const clearConnectionError = useModelStore((s) => s.clearConnectionError);
 
+  // Map each parented outcomeId -> parentQuestionId
+  const parentQuestionByOutcome = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of edges) {
+      if (e.data?.kind === 'question-to-outcome') {
+        map.set(e.target, e.source);
+      }
+    }
+    return map;
+  }, [edges]);
+
+  // Project nodes & edges when in 'nested' mode so parented outcomes are hidden on canvas
+  // and their outgoing links originate from their embedded handle (`outcome:<id>`) on the Question card.
+  const displayNodes = useMemo<ModelNode[]>(() => {
+    if (outcomeDisplayMode !== 'nested') return nodes;
+    return nodes.map((n) => {
+      if (n.type === 'outcome' && parentQuestionByOutcome.has(n.id)) {
+        return { ...n, hidden: true };
+      }
+      return n.hidden ? { ...n, hidden: false } : n;
+    });
+  }, [nodes, outcomeDisplayMode, parentQuestionByOutcome]);
+
+  const displayEdges = useMemo<ModelEdge[]>(() => {
+    if (outcomeDisplayMode !== 'nested') {
+      return edges.map((e) => (e.hidden ? { ...e, hidden: false } : e));
+    }
+    return edges.map((e) => {
+      if (
+        e.data?.kind === 'question-to-outcome' &&
+        parentQuestionByOutcome.has(e.target)
+      ) {
+        return { ...e, hidden: true };
+      }
+      const parentQId = parentQuestionByOutcome.get(e.source);
+      if (parentQId) {
+        const srcOutcome = nodes.find(
+          (n) => n.id === e.source && n.type === 'outcome'
+        );
+        const probLabel =
+          srcOutcome && srcOutcome.type === 'outcome'
+            ? `${srcOutcome.data.probabilityPct}%`
+            : e.label;
+        return {
+          ...e,
+          hidden: false,
+          source: parentQId,
+          sourceHandle: `outcome:${e.source}`,
+          label: probLabel,
+          zIndex: 10,
+        };
+      }
+      return {
+        ...e,
+        hidden: false,
+        sourceHandle: null,
+        zIndex: 10,
+      };
+    });
+  }, [edges, nodes, outcomeDisplayMode, parentQuestionByOutcome]);
+
+  // Whenever display mode or question outcomes change, refresh ReactFlow handle positions
+  useEffect(() => {
+    const questionIds = nodes
+      .filter((n) => n.type === 'question')
+      .map((n) => n.id);
+    if (questionIds.length === 0) return;
+
+    updateNodeInternals(questionIds);
+    const raf = window.requestAnimationFrame(() => {
+      updateNodeInternals(questionIds);
+    });
+    const timer = window.setTimeout(() => {
+      updateNodeInternals(questionIds);
+    }, 60);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [outcomeDisplayMode, nodes, edges, updateNodeInternals]);
+
   useEffect(() => {
     if (layoutVersion === 0) return;
     const timer = window.setTimeout(() => {
       fitView({ padding: 0.18, duration: 300 });
-    }, 30);
+    }, 40);
     return () => window.clearTimeout(timer);
   }, [layoutVersion, fitView]);
 
@@ -117,10 +202,14 @@ function FlowCanvasInner() {
 
   const isValidConnection: IsValidConnection = useCallback(
     (connection) => {
+      let actualSource = connection.source;
+      if (connection.sourceHandle?.startsWith('outcome:')) {
+        actualSource = connection.sourceHandle.slice('outcome:'.length);
+      }
       const check = canConnectNodes(
         nodes,
         edges,
-        connection.source,
+        actualSource,
         connection.target
       );
       return check.allowed;
@@ -155,7 +244,6 @@ function FlowCanvasInner() {
       event.preventDefault();
       event.stopPropagation();
 
-      // If right-clicked node isn't part of current selection, select it exclusively
       const currentlySelected = nodes.filter((n) => n.selected);
       const isAlreadySelected = currentlySelected.some((n) => n.id === node.id);
       if (!isAlreadySelected) {
@@ -251,8 +339,8 @@ function FlowCanvasInner() {
       )}
 
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={displayNodes}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -282,6 +370,7 @@ function FlowCanvasInner() {
         multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
         fitView
         fitViewOptions={{ padding: 0.18 }}
+        elevateEdgesOnSelect
         deleteKeyCode={['Backspace', 'Delete']}
         proOptions={{ hideAttribution: true }}
       >

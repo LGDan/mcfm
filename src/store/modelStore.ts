@@ -16,6 +16,7 @@ import {
   type ModelEdge,
   type ModelNode,
   type ModelNodeType,
+  type OutcomeDisplayMode,
   type OutcomeFlowNode,
   type ProjectModel,
   type SimulationResult,
@@ -73,6 +74,8 @@ export function decorateEdge(
   return {
     ...edge,
     type: 'smoothstep',
+    zIndex: 10,
+    interactionWidth: 22,
     animated: isAnd,
     label,
     labelStyle: isAnd
@@ -184,10 +187,12 @@ interface ModelStoreState {
   connectionError: string | null;
   layoutVersion: number;
   layoutAlgorithm: LayoutAlgorithm;
+  outcomeDisplayMode: OutcomeDisplayMode;
 
   setModelName: (name: string) => void;
   setCurrency: (currency: CurrencyCode) => void;
   setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void;
+  setOutcomeDisplayMode: (mode: OutcomeDisplayMode) => void;
   setActiveTab: (tab: ActiveTab) => void;
   setTrials: (trials: number) => void;
   clearConnectionError: () => void;
@@ -249,6 +254,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   connectionError: null,
   layoutVersion: 0,
   layoutAlgorithm: 'layered-lr',
+  outcomeDisplayMode: 'separate',
 
   setModelName: (name) => {
     set({ modelName: name });
@@ -259,6 +265,11 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   setLayoutAlgorithm: (algorithm) => {
     set({ layoutAlgorithm: algorithm });
     get().autoLayout(algorithm);
+  },
+
+  setOutcomeDisplayMode: (mode) => {
+    set({ outcomeDisplayMode: mode });
+    get().autoLayout();
   },
 
   setCurrency: (currency) => {
@@ -343,10 +354,19 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
 
   onConnect: (connection) => {
     const { nodes, edges, modelName, currency } = get();
+    // If dragging from an embedded outcome handle inside a QuestionNode (`outcome:<id>`),
+    // treat that outcome node as the true logical source.
+    let actualSource = connection.source;
+    let actualSourceHandle = connection.sourceHandle ?? null;
+    if (actualSourceHandle?.startsWith('outcome:')) {
+      actualSource = actualSourceHandle.slice('outcome:'.length);
+      actualSourceHandle = null;
+    }
+
     const check = canConnectNodes(
       nodes,
       edges,
-      connection.source,
+      actualSource,
       connection.target
     );
     if (!check.allowed || !check.kind) {
@@ -356,10 +376,10 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
 
     const newEdge: ModelEdge = decorateEdge(
       {
-        id: `e-${connection.source}-${connection.target}-${Date.now()}`,
-        source: connection.source!,
+        id: `e-${actualSource}-${connection.target}-${Date.now()}`,
+        source: actualSource!,
         target: connection.target!,
-        sourceHandle: connection.sourceHandle ?? null,
+        sourceHandle: actualSourceHandle,
         targetHandle: connection.targetHandle ?? null,
         data: { kind: check.kind },
       },
@@ -545,8 +565,19 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
 
   deleteNodesByIds: (nodeIds) => {
     if (nodeIds.length === 0) return;
-    const { nodes, edges, modelName, currency } = get();
+    const { nodes, edges, modelName, currency, outcomeDisplayMode } = get();
     const removeSet = new Set(nodeIds);
+    // In nested mode, deleting a Question also deletes its embedded child Outcomes
+    if (outcomeDisplayMode === 'nested') {
+      for (const e of edges) {
+        if (
+          e.data?.kind === 'question-to-outcome' &&
+          removeSet.has(e.source)
+        ) {
+          removeSet.add(e.target);
+        }
+      }
+    }
     const nextNodes = nodes.filter((n) => !removeSet.has(n.id));
     const nextEdges = hydrateEdges(
       nextNodes,
@@ -589,15 +620,26 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       selectedNodeId,
       explicitNodeIds
     );
-    // Exclude 'start' if another start exists; only copyable nodes are question/outcome/end (or start if none exists on paste)
+    // If a Question node is copied/duplicated, automatically include its attached child Outcomes
+    // so that in Nested Outcomes view (or Separate view) the full question+outcomes unit copies cleanly.
+    const expandedIds = new Set(targetIds);
+    for (const e of edges) {
+      if (
+        e.data?.kind === 'question-to-outcome' &&
+        targetIds.has(e.source)
+      ) {
+        expandedIds.add(e.target);
+      }
+    }
+
     const copiedNodes = nodes
-      .filter((n) => targetIds.has(n.id))
+      .filter((n) => expandedIds.has(n.id))
       .map((n) => structuredClone(n));
 
     if (copiedNodes.length === 0) return 0;
 
     const copiedEdges = edges
-      .filter((e) => targetIds.has(e.source) && targetIds.has(e.target))
+      .filter((e) => expandedIds.has(e.source) && expandedIds.has(e.target))
       .map((e) => structuredClone(e));
 
     set({
@@ -848,9 +890,15 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       currency,
       layoutVersion,
       layoutAlgorithm,
+      outcomeDisplayMode,
     } = get();
     const algo = algorithmOverride ?? layoutAlgorithm;
-    const laidOutNodes = computeAutoLayout(nodes, edges, algo);
+    const laidOutNodes = computeAutoLayout(
+      nodes,
+      edges,
+      algo,
+      outcomeDisplayMode
+    );
     set({
       nodes: laidOutNodes,
       layoutAlgorithm: algo,
@@ -956,15 +1004,21 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     ]);
     const validation = validateModel(freshNodes, freshEdges);
     const name = 'New Project Budget Model';
+    const laidOutNodes = computeAutoLayout(
+      freshNodes,
+      freshEdges,
+      get().layoutAlgorithm,
+      get().outcomeDisplayMode
+    );
     set({
       modelName: name,
-      nodes: freshNodes,
+      nodes: laidOutNodes,
       edges: freshEdges,
       selectedNodeId: 'q-1',
       selectedEdgeId: null,
       validation,
       simulationResult: runMonteCarloSimulation(
-        freshNodes,
+        laidOutNodes,
         freshEdges,
         trials,
         currency
@@ -973,13 +1027,20 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       connectionError: null,
       layoutVersion: layoutVersion + 1,
     });
-    persistDraft(name, currency, freshNodes, freshEdges);
+    persistDraft(name, currency, laidOutNodes, freshEdges);
   },
 
   loadDemoModel: () => {
-    const { currency, trials, layoutVersion } = get();
-    const nodes = structuredClone(DEMO_MODEL.nodes);
-    const edges = hydrateEdges(nodes, structuredClone(DEMO_MODEL.edges));
+    const { currency, trials, layoutVersion, layoutAlgorithm, outcomeDisplayMode } =
+      get();
+    const rawNodes = structuredClone(DEMO_MODEL.nodes);
+    const edges = hydrateEdges(rawNodes, structuredClone(DEMO_MODEL.edges));
+    const nodes = computeAutoLayout(
+      rawNodes,
+      edges,
+      layoutAlgorithm,
+      outcomeDisplayMode
+    );
     const validation = validateModel(nodes, edges);
     const simulationResult = runMonteCarloSimulation(
       nodes,

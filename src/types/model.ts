@@ -11,6 +11,8 @@ export type LayoutAlgorithm =
   | 'compact-lr'
   | 'radial';
 
+export type OutcomeDisplayMode = 'separate' | 'nested';
+
 export const LAYOUT_ALGORITHMS: {
   id: LayoutAlgorithm;
   label: string;

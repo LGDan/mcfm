@@ -110,7 +110,7 @@ export function Toolbar() {
           onClick={() => setActiveTab('editor')}
         >
           <MdiIcon path={mdiSitemapOutline} size={15} />
-          <span>DAG Editor</span>
+          <span>Editor</span>
         </button>
         <button
           type="button"
@@ -118,7 +118,7 @@ export function Toolbar() {
           onClick={() => setActiveTab('results')}
         >
           <MdiIcon path={mdiChartBellCurveCumulative} size={15} />
-          <span>Simulation Results</span>
+          <span>Results</span>
           {simulationResult && (
             <span className="tab-p80-badge">
               P80: {formatCurrency(simulationResult.p80, currency)}
@@ -148,7 +148,7 @@ export function Toolbar() {
           />
           <span>
             {validation.valid
-              ? 'Valid DAG'
+              ? 'Valid'
               : `${validation.errors.length} Error${
                   validation.errors.length === 1 ? '' : 's'
                 }`}
@@ -167,7 +167,7 @@ export function Toolbar() {
           }
         >
           <MdiIcon path={mdiPlay} size={15} />
-          <span>Run Simulation</span>
+          <span>Run</span>
         </button>
 
         <div className="toolbar-divider" />

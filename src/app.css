@@ -1049,6 +1049,17 @@ body,
   margin-bottom: 3px;
 }
 
+.outcome-inline-slider-row {
+  margin-top: 7px;
+}
+
+.outcome-inline-slider-row input[type='range'],
+.prop-field input[type='range'] {
+  width: 100%;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
 .prop-button-group {
   display: flex;
   flex-direction: column;

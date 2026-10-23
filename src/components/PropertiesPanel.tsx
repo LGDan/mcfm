@@ -22,6 +22,9 @@ export function PropertiesPanel() {
   const splitQuestionProbabilitiesEvenly = useModelStore(
     (s) => s.splitQuestionProbabilitiesEvenly
   );
+  const rebalanceOutcomeProbability = useModelStore(
+    (s) => s.rebalanceOutcomeProbability
+  );
   const copyNodes = useModelStore((s) => s.copyNodes);
   const cutNodes = useModelStore((s) => s.cutNodes);
   const duplicateNodes = useModelStore((s) => s.duplicateNodes);
@@ -321,6 +324,21 @@ export function PropertiesPanel() {
                     />
                   </div>
                 </div>
+
+                <div className="outcome-inline-slider-row">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={o.data.probabilityPct}
+                    onChange={(e) =>
+                      rebalanceOutcomeProbability(o.id, Number(e.target.value))
+                    }
+                    aria-label={`${o.data.label} probability slider (auto-balances siblings)`}
+                    title="Drag to adjust probability and auto-balance sibling outcomes to 100%"
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -461,10 +479,9 @@ export function PropertiesPanel() {
               step={1}
               value={oNode.data.probabilityPct}
               onChange={(e) =>
-                updateNodeData(oNode.id, {
-                  probabilityPct: Number(e.target.value),
-                })
+                rebalanceOutcomeProbability(oNode.id, Number(e.target.value))
               }
+              title="Drag to adjust probability and auto-balance sibling outcomes to 100%"
             />
           </div>
 

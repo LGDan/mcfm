@@ -225,6 +225,7 @@ interface ModelStoreState {
 
   addOutcomeForQuestion: (questionId: string) => void;
   splitQuestionProbabilitiesEvenly: (questionId: string) => void;
+  rebalanceOutcomeProbability: (outcomeId: string, newProbPct: number) => void;
   autoLayout: (algorithm?: LayoutAlgorithm) => void;
 
   runSimulation: (switchTab?: boolean) => boolean;
@@ -538,6 +539,92 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         },
       } as ModelNode;
     });
+    const nextEdges = hydrateEdges(nextNodes, edges);
+    const validation = validateModel(nextNodes, nextEdges);
+    set({ nodes: nextNodes, edges: nextEdges, validation });
+    persistDraft(modelName, currency, nextNodes, nextEdges);
+  },
+
+  rebalanceOutcomeProbability: (outcomeId, newProbPct) => {
+    const { nodes, edges, modelName, currency } = get();
+    const clampedTarget = Math.max(
+      0,
+      Math.min(100, Math.round(Number(newProbPct) || 0))
+    );
+
+    const parentEdge = edges.find(
+      (e) => e.target === outcomeId && e.data?.kind === 'question-to-outcome'
+    );
+    if (!parentEdge) {
+      get().updateNodeData(outcomeId, { probabilityPct: clampedTarget });
+      return;
+    }
+
+    const questionId = parentEdge.source;
+    const siblingIds = edges
+      .filter(
+        (e) =>
+          e.source === questionId &&
+          e.data?.kind === 'question-to-outcome' &&
+          e.target !== outcomeId
+      )
+      .map((e) => e.target)
+      .filter((id) => nodes.some((n) => n.id === id && n.type === 'outcome'));
+
+    if (siblingIds.length === 0) {
+      get().updateNodeData(outcomeId, { probabilityPct: clampedTarget });
+      return;
+    }
+
+    const remainder = Math.max(0, 100 - clampedTarget);
+    const siblingNodes = siblingIds.map(
+      (id) => nodes.find((n) => n.id === id) as OutcomeFlowNode
+    );
+    const currentSiblingsSum = siblingNodes.reduce(
+      (acc, s) => acc + Math.max(0, Number(s.data.probabilityPct) || 0),
+      0
+    );
+
+    // Compute proportional shares (or equal shares if all siblings were at 0%)
+    const rawShares = siblingNodes.map((s) => {
+      const cur = Math.max(0, Number(s.data.probabilityPct) || 0);
+      if (currentSiblingsSum > 0) {
+        return (cur / currentSiblingsSum) * remainder;
+      }
+      return remainder / siblingNodes.length;
+    });
+
+    // Largest-remainder integer rounding so sibling integer percentages sum to `remainder`
+    const floored = rawShares.map((v) => Math.floor(v));
+    let deficit = Math.round(
+      remainder - floored.reduce((acc, v) => acc + v, 0)
+    );
+    const indicesByFrac = rawShares
+      .map((v, idx) => ({ idx, frac: v - Math.floor(v) }))
+      .sort((a, b) => b.frac - a.frac);
+
+    for (let i = 0; i < indicesByFrac.length && deficit > 0; i++) {
+      floored[indicesByFrac[i].idx] += 1;
+      deficit -= 1;
+    }
+
+    const newProbById = new Map<string, number>();
+    newProbById.set(outcomeId, clampedTarget);
+    siblingIds.forEach((id, idx) => {
+      newProbById.set(id, floored[idx]);
+    });
+
+    const nextNodes = nodes.map((n) => {
+      if (n.type !== 'outcome' || !newProbById.has(n.id)) return n;
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          probabilityPct: newProbById.get(n.id)!,
+        },
+      } as OutcomeFlowNode;
+    });
+
     const nextEdges = hydrateEdges(nextNodes, edges);
     const validation = validateModel(nextNodes, nextEdges);
     set({ nodes: nextNodes, edges: nextEdges, validation });

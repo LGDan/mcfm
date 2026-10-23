@@ -1,9 +1,17 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { formatCurrency, type OutcomeFlowNode } from '../../types/model';
+import { isOutcomeOutputBlocked } from '../../sim/validate';
 import { useModelStore } from '../../store/modelStore';
 
-export function OutcomeNode({ data, selected }: NodeProps<OutcomeFlowNode>) {
+export function OutcomeNode({
+  id,
+  data,
+  selected,
+}: NodeProps<OutcomeFlowNode>) {
   const currency = useModelStore((s) => s.currency);
+  const outcomeBlocked = useModelStore((s) =>
+    isOutcomeOutputBlocked(id, s.edges)
+  );
 
   return (
     <div
@@ -35,7 +43,15 @@ export function OutcomeNode({ data, selected }: NodeProps<OutcomeFlowNode>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="flow-handle flow-handle-source"
+        isConnectable={!outcomeBlocked}
+        className={`flow-handle flow-handle-source ${
+          outcomeBlocked ? 'is-disabled' : ''
+        }`}
+        title={
+          outcomeBlocked
+            ? 'Disabled: parent Question already has an aggregate output connection'
+            : 'Connect this Outcome to next Question or End'
+        }
       />
     </div>
   );

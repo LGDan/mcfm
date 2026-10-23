@@ -99,6 +99,7 @@ export type EdgeKind =
   | 'start-to-question'
   | 'question-to-outcome'
   | 'question-to-question'
+  | 'question-to-end'
   | 'outcome-to-question'
   | 'outcome-to-end';
 

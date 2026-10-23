@@ -133,14 +133,16 @@ export function PropertiesPanel() {
             <label>Connection Type</label>
             <div className="prop-readonly-box">
               {kind === 'question-to-question'
-                ? 'AND Chain (Question → Question)'
-                : kind === 'question-to-outcome'
-                  ? 'OR Outcome Branch (Question → Outcome)'
-                  : kind === 'outcome-to-question'
-                    ? 'Conditional Follow-up (Outcome → Question)'
-                    : kind === 'start-to-question'
-                      ? 'Entry Link (Start → Question)'
-                      : 'Terminal Link (Outcome → End)'}
+                ? 'Aggregate Question Link (Question → Question)'
+                : kind === 'question-to-end'
+                  ? 'Aggregate Terminal Link (Question → End)'
+                  : kind === 'question-to-outcome'
+                    ? 'OR Outcome Branch (Question → Outcome)'
+                    : kind === 'outcome-to-question'
+                      ? 'Conditional Follow-up (Outcome → Question)'
+                      : kind === 'start-to-question'
+                        ? 'Entry Link (Start → Question)'
+                        : 'Terminal Link (Outcome → End)'}
             </div>
           </div>
 

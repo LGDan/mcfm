@@ -85,14 +85,13 @@ export function Toolbox() {
             <span className="tag-or">OR</span> branch (must sum to 100%)
           </li>
           <li>
-            <strong>Question → Question</strong>: Parallel{' '}
-            <span className="tag-and">AND</span> chain (both are evaluated)
+            <strong>Question → Question / End</strong>: Aggregate{' '}
+            <span className="tag-and">ALL</span> continuation (disables
+            individual outcome connectors)
           </li>
           <li>
-            <strong>Outcome → Question</strong>: Conditional follow-up question
-          </li>
-          <li>
-            <strong>Outcome → End</strong>: Terminate branch
+            <strong>Outcome → Question / End</strong>: Branch-specific
+            continuation (disables parent question connector)
           </li>
         </ul>
       </div>

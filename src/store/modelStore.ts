@@ -27,7 +27,7 @@ import { runMonteCarloSimulation } from '../sim/monteCarlo';
 import { computeAutoLayout } from '../sim/autoLayout';
 import { DEMO_MODEL } from './demoModel';
 
-const STORAGE_KEY = 'mc-modeller:v1';
+const STORAGE_KEY = 'mc-modeller:v2';
 
 export type ActiveTab = 'editor' | 'results';
 
@@ -52,12 +52,15 @@ export function decorateEdge(
     'start-to-question';
 
   const isAnd = kind === 'question-to-question';
+  const isQuestionEnd = kind === 'question-to-end';
   const isEnd = kind === 'outcome-to-end';
   const isOr = kind === 'question-to-outcome';
 
   let label: string | undefined;
   if (isAnd) {
-    label = 'AND';
+    label = 'ALL →';
+  } else if (isQuestionEnd) {
+    label = 'ALL';
   } else if (isOr && tgt?.type === 'outcome') {
     const o = tgt as OutcomeFlowNode;
     label = `${o.data.probabilityPct}%`;
@@ -65,11 +68,13 @@ export function decorateEdge(
 
   const strokeColor = isAnd
     ? '#f59e0b'
-    : isOr
-      ? '#38bdf8'
-      : isEnd
-        ? '#64748b'
-        : '#94a3b8';
+    : isQuestionEnd
+      ? '#a78bfa'
+      : isOr
+        ? '#38bdf8'
+        : isEnd
+          ? '#64748b'
+          : '#94a3b8';
 
   return {
     ...edge,
@@ -80,7 +85,9 @@ export function decorateEdge(
     label,
     labelStyle: isAnd
       ? { fill: '#fbbf24', fontWeight: 700, fontSize: 11 }
-      : { fill: '#e2e8f0', fontWeight: 600, fontSize: 11 },
+      : isQuestionEnd
+        ? { fill: '#c4b5fd', fontWeight: 700, fontSize: 10.5 }
+        : { fill: '#e2e8f0', fontWeight: 600, fontSize: 11 },
     labelBgStyle: {
       fill: '#0f172a',
       fillOpacity: 0.9,
@@ -91,7 +98,7 @@ export function decorateEdge(
     labelBgBorderRadius: 4,
     style: {
       stroke: strokeColor,
-      strokeWidth: isAnd ? 2.2 : 2,
+      strokeWidth: isAnd || isQuestionEnd ? 2.2 : 2,
       strokeDasharray: isAnd ? '6 4' : undefined,
     },
     markerEnd: {
@@ -990,16 +997,10 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         data: { kind: 'question-to-outcome' },
       },
       {
-        id: 'e-o1-end',
-        source: 'o-1',
+        id: 'e-q1-end',
+        source: 'q-1',
         target: 'end-1',
-        data: { kind: 'outcome-to-end' },
-      },
-      {
-        id: 'e-o2-end',
-        source: 'o-2',
-        target: 'end-1',
-        data: { kind: 'outcome-to-end' },
+        data: { kind: 'question-to-end' },
       },
     ]);
     const validation = validateModel(freshNodes, freshEdges);

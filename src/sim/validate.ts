@@ -18,9 +18,61 @@ export function inferEdgeKind(
   if (sourceType === 'start' && targetType === 'question') return 'start-to-question';
   if (sourceType === 'question' && targetType === 'outcome') return 'question-to-outcome';
   if (sourceType === 'question' && targetType === 'question') return 'question-to-question';
+  if (sourceType === 'question' && targetType === 'end') return 'question-to-end';
   if (sourceType === 'outcome' && targetType === 'question') return 'outcome-to-question';
   if (sourceType === 'outcome' && targetType === 'end') return 'outcome-to-end';
   return null;
+}
+
+/**
+ * Returns the IDs of all Outcome nodes that belong to a given Question node.
+ */
+export function getQuestionChildOutcomeIds(
+  questionId: string,
+  edges: ModelEdge[]
+): string[] {
+  return edges
+    .filter(
+      (e) => e.source === questionId && e.data?.kind === 'question-to-outcome'
+    )
+    .map((e) => e.target);
+}
+
+/**
+ * Returns true if any child Outcome of `questionId` has an outgoing connection
+ * (e.g. `outcome -> question` or `outcome -> end`).
+ * When true, the Question's own aggregate output connector (`question -> question` / `question -> end`)
+ * must be blocked/disabled.
+ */
+export function isQuestionOutputBlocked(
+  questionId: string,
+  edges: ModelEdge[]
+): boolean {
+  const childOutcomeIds = new Set(getQuestionChildOutcomeIds(questionId, edges));
+  if (childOutcomeIds.size === 0) return false;
+  return edges.some((e) => childOutcomeIds.has(e.source));
+}
+
+/**
+ * Returns true if the parent Question of `outcomeId` already has an aggregate
+ * output connection (`question -> question` or `question -> end`).
+ * When true, all child Outcomes of that Question must have their output connectors blocked/disabled.
+ */
+export function isOutcomeOutputBlocked(
+  outcomeId: string,
+  edges: ModelEdge[]
+): boolean {
+  const parentEdge = edges.find(
+    (e) => e.target === outcomeId && e.data?.kind === 'question-to-outcome'
+  );
+  if (!parentEdge) return false;
+  const parentQuestionId = parentEdge.source;
+  return edges.some(
+    (e) =>
+      e.source === parentQuestionId &&
+      (e.data?.kind === 'question-to-question' ||
+        e.data?.kind === 'question-to-end')
+  );
 }
 
 export function wouldCreateCycle(
@@ -30,11 +82,17 @@ export function wouldCreateCycle(
   targetId: string
 ): boolean {
   if (sourceId === targetId) return true;
+  const nodeMap = new Map<string, ModelNode>();
   const adj = new Map<string, string[]>();
-  for (const n of nodes) adj.set(n.id, []);
+  for (const n of nodes) {
+    nodeMap.set(n.id, n);
+    adj.set(n.id, []);
+  }
   for (const e of edges) {
     adj.get(e.source)?.push(e.target);
   }
+
+  // Also treat child outcomes as reaching whatever their parent question reaches and vice versa
   // Check if sourceId is reachable from targetId
   const visited = new Set<string>();
   const stack = [targetId];
@@ -76,13 +134,34 @@ export function canConnectNodes(
   if (!kind) {
     return {
       allowed: false,
-      reason: `Cannot link ${sourceNode.type} → ${targetNode.type}. Allowed: Start→Question, Question→Outcome, Question→Question (AND), Outcome→Question, Outcome→End.`,
+      reason: `Cannot link ${sourceNode.type} → ${targetNode.type}. Allowed: Start→Question, Question→Outcome, Question→Question, Question→End, Outcome→Question, Outcome→End.`,
     };
   }
 
   // Prevent duplicate edge between same pair
   if (edges.some((e) => e.source === sourceId && e.target === targetId)) {
     return { allowed: false, reason: 'Connection already exists.' };
+  }
+
+  // Mutual exclusion between Question aggregate output and individual Outcome outputs
+  if (kind === 'question-to-question' || kind === 'question-to-end') {
+    if (isQuestionOutputBlocked(sourceId, edges)) {
+      return {
+        allowed: false,
+        reason:
+          'Question output connector is disabled because one or more of its Outcomes already have outgoing connections.',
+      };
+    }
+  }
+
+  if (kind === 'outcome-to-question' || kind === 'outcome-to-end') {
+    if (isOutcomeOutputBlocked(sourceId, edges)) {
+      return {
+        allowed: false,
+        reason:
+          'Outcome output connector is disabled because its parent Question is already connected via its aggregate output connector.',
+      };
+    }
   }
 
   // Every outcome can have at most ONE incoming edge (from its parent question)
@@ -215,6 +294,23 @@ export function validateModel(nodes: ModelNode[], edges: ModelEdge[]): Validatio
       const sum = outcomes.reduce((acc, o) => acc + (Number(o.data.probabilityPct) || 0), 0);
       questionProbSums[node.id] = Math.round(sum * 100) / 100;
       questionOutcomeCounts[node.id] = outcomes.length;
+
+      // Check mutual exclusion of Question-level output vs Outcome-level output
+      const hasAggregateOut = edges.some(
+        (e) =>
+          e.source === node.id &&
+          (e.data?.kind === 'question-to-question' ||
+            e.data?.kind === 'question-to-end')
+      );
+      const hasOutcomeOut = isQuestionOutputBlocked(node.id, edges);
+      if (hasAggregateOut && hasOutcomeOut) {
+        errors.push({
+          id: `q-mixed-routing-${node.id}`,
+          severity: 'error',
+          nodeId: node.id,
+          message: `Question "${node.data.label}" cannot use both its Question output connector and individual Outcome output connectors simultaneously.`,
+        });
+      }
 
       const isReachable = reachableNodeIds.has(node.id);
       if (outcomes.length === 0) {

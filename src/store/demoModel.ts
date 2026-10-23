@@ -59,7 +59,7 @@ export const DEMO_MODEL: ProjectModel = {
       position: { x: 860, y: 60 },
       data: {
         label: 'Legacy Database Licensing',
-        description: 'Triggered if we keep legacy DB engine during Lift & Shift or Containerization.',
+        description: 'Triggered if we keep legacy DB engine; both outcomes proceed to Security Audit.',
       },
     },
     {
@@ -87,16 +87,16 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'q-sec',
       type: 'question',
-      position: { x: 250, y: 420 },
+      position: { x: 860, y: 380 },
       data: {
         label: 'Security & Compliance Audit',
-        description: 'Mandatory parallel workstream (AND chain) required regardless of migration path.',
+        description: 'Mandatory compliance stage following migration and database decisions.',
       },
     },
     {
       id: 'o-sec-std',
       type: 'outcome',
-      position: { x: 560, y: 385 },
+      position: { x: 1170, y: 345 },
       data: {
         label: 'Automated SOC2 Assessment',
         description: 'Compliance platform + internal security review.',
@@ -107,7 +107,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-sec-pen',
       type: 'outcome',
-      position: { x: 560, y: 510 },
+      position: { x: 1170, y: 470 },
       data: {
         label: 'External Red-Team & Remediation',
         description: 'Full adversarial penetration test by accredited CREST consultancy.',
@@ -118,7 +118,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'q-remed',
       type: 'question',
-      position: { x: 860, y: 485 },
+      position: { x: 1470, y: 465 },
       data: {
         label: 'Critical Findings Hardware HSM?',
         description: 'If Red-Team identifies key-management gaps, dedicated HSMs may be needed.',
@@ -127,7 +127,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-hsm-no',
       type: 'outcome',
-      position: { x: 1170, y: 420 },
+      position: { x: 1780, y: 400 },
       data: {
         label: 'Software KMS Sufficient',
         description: 'Standard cloud KMS key rotation satisfies auditors.',
@@ -138,7 +138,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-hsm-yes',
       type: 'outcome',
-      position: { x: 1170, y: 545 },
+      position: { x: 1780, y: 525 },
       data: {
         label: 'Dedicated CloudHSM Cluster',
         description: 'FIPS 140-3 Level 3 dedicated hardware security modules required.',
@@ -149,7 +149,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'end-1',
       type: 'end',
-      position: { x: 1480, y: 270 },
+      position: { x: 2090, y: 290 },
       data: { label: 'Project Complete' },
     },
   ],
@@ -160,12 +160,7 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'q-arch',
       data: { kind: 'start-to-question' },
     },
-    {
-      id: 'e-arch-and-sec',
-      source: 'q-arch',
-      target: 'q-sec',
-      data: { kind: 'question-to-question' },
-    },
+    // Cloud Migration Strategy outcomes (Outcome-level routing)
     {
       id: 'e-arch-lift',
       source: 'q-arch',
@@ -184,6 +179,7 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'o-rebuild',
       data: { kind: 'question-to-outcome' },
     },
+    // Lift & Shift and Refactor both lead to Legacy DB Licensing question
     {
       id: 'e-lift-db',
       source: 'o-lift',
@@ -196,12 +192,14 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'q-db',
       data: { kind: 'outcome-to-question' },
     },
+    // Rebuild bypasses Legacy DB Licensing and goes straight to Security Audit
     {
-      id: 'e-rebuild-end',
+      id: 'e-rebuild-sec',
       source: 'o-rebuild',
-      target: 'end-1',
-      data: { kind: 'outcome-to-end' },
+      target: 'q-sec',
+      data: { kind: 'outcome-to-question' },
     },
+    // DB outcomes + Question-level aggregate link from q-db -> q-sec
     {
       id: 'e-db-renew',
       source: 'q-db',
@@ -215,17 +213,12 @@ export const DEMO_MODEL: ProjectModel = {
       data: { kind: 'question-to-outcome' },
     },
     {
-      id: 'e-db-renew-end',
-      source: 'o-db-renew',
-      target: 'end-1',
-      data: { kind: 'outcome-to-end' },
+      id: 'e-db-to-sec',
+      source: 'q-db',
+      target: 'q-sec',
+      data: { kind: 'question-to-question' },
     },
-    {
-      id: 'e-db-ent-end',
-      source: 'o-db-enterprise',
-      target: 'end-1',
-      data: { kind: 'outcome-to-end' },
-    },
+    // Security outcomes (Outcome-level routing)
     {
       id: 'e-sec-std',
       source: 'q-sec',
@@ -250,6 +243,7 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'q-remed',
       data: { kind: 'outcome-to-question' },
     },
+    // Remediation outcomes + Question-level aggregate link from q-remed -> end-1
     {
       id: 'e-remed-no',
       source: 'q-remed',
@@ -263,16 +257,10 @@ export const DEMO_MODEL: ProjectModel = {
       data: { kind: 'question-to-outcome' },
     },
     {
-      id: 'e-hsm-no-end',
-      source: 'o-hsm-no',
+      id: 'e-remed-to-end',
+      source: 'q-remed',
       target: 'end-1',
-      data: { kind: 'outcome-to-end' },
-    },
-    {
-      id: 'e-hsm-yes-end',
-      source: 'o-hsm-yes',
-      target: 'end-1',
-      data: { kind: 'outcome-to-end' },
+      data: { kind: 'question-to-end' },
     },
   ],
 };

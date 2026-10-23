@@ -774,6 +774,13 @@ body,
   z-index: 15 !important;
 }
 
+.flow-handle.is-disabled {
+  background: #334155 !important;
+  border-color: #1e293b !important;
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+
 /* Ensure React Flow edges render cleanly above node backgrounds so paths are never hidden */
 .react-flow__edges {
   z-index: 4 !important;

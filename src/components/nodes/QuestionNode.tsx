@@ -4,6 +4,10 @@ import {
   type OutcomeFlowNode,
   type QuestionFlowNode,
 } from '../../types/model';
+import {
+  isOutcomeOutputBlocked,
+  isQuestionOutputBlocked,
+} from '../../sim/validate';
 import { useModelStore } from '../../store/modelStore';
 
 export function QuestionNode({
@@ -27,6 +31,26 @@ export function QuestionNode({
 
   const isBalanced = outcomeCount > 0 && Math.abs(probSum - 100) <= 0.05;
   const isNested = outcomeDisplayMode === 'nested';
+
+  const questionOutputBlocked = isQuestionOutputBlocked(id, edges);
+  const hasQuestionAggregateOut = edges.some(
+    (e) =>
+      e.source === id &&
+      (e.data?.kind === 'question-to-question' ||
+        e.data?.kind === 'question-to-end')
+  );
+
+  // In Separate mode, only allow dragging from the Question handle if either
+  // question output is not blocked OR there are unparented outcome nodes on canvas to attach
+  const hasUnparentedOutcomeOnCanvas =
+    !isNested &&
+    nodes.some(
+      (n) =>
+        n.type === 'outcome' && !edges.some((e) => e.target === n.id)
+    );
+  const isQuestionHandleConnectable = isNested
+    ? !questionOutputBlocked
+    : !questionOutputBlocked || hasUnparentedOutcomeOnCanvas;
 
   const childOutcomes: OutcomeFlowNode[] = isNested
     ? edges
@@ -75,7 +99,11 @@ export function QuestionNode({
           <div className="nested-outcomes-header">
             <span>OR OUTCOMES</span>
             <span className="nested-and-hint">
-              Top handle = AND chain
+              {questionOutputBlocked
+                ? 'Routing via Outcomes'
+                : hasQuestionAggregateOut
+                  ? 'Routing via Question (Aggregate)'
+                  : 'Connect Question (All) or Outcomes'}
             </span>
           </div>
 
@@ -88,6 +116,7 @@ export function QuestionNode({
               {childOutcomes.map((o) => {
                 const isOutcomeSelected =
                   selectedNodeId === o.id || Boolean(o.selected);
+                const outcomeBlocked = isOutcomeOutputBlocked(o.id, edges);
                 return (
                   <div
                     key={o.id}
@@ -125,8 +154,15 @@ export function QuestionNode({
                       type="source"
                       id={`outcome:${o.id}`}
                       position={Position.Right}
-                      className="flow-handle flow-handle-outcome-child"
-                      title={`Connect from outcome "${o.data.label}" to next Question or End`}
+                      isConnectable={!outcomeBlocked}
+                      className={`flow-handle flow-handle-outcome-child ${
+                        outcomeBlocked ? 'is-disabled' : ''
+                      }`}
+                      title={
+                        outcomeBlocked
+                          ? 'Disabled: parent Question already has an aggregate output connection'
+                          : `Connect outcome "${o.data.label}" to next Question or End`
+                      }
                     />
                   </div>
                 );
@@ -153,17 +189,18 @@ export function QuestionNode({
         </button>
       </div>
 
-      {/* Default source handle (no id) so standard edges and AND chains always attach cleanly */}
+      {/* Default source handle (no id) for aggregate Question -> Question / Question -> End (and Question -> Outcome in Separate mode) */}
       <Handle
         type="source"
         position={Position.Right}
+        isConnectable={isQuestionHandleConnectable}
         className={`flow-handle flow-handle-source ${
           isNested ? 'flow-handle-question-and' : ''
-        }`}
+        } ${questionOutputBlocked ? 'is-disabled' : ''}`}
         title={
-          isNested
-            ? 'Connect to another Question (AND chain) or external Outcome'
-            : 'Connect to Outcome (OR) or another Question (AND)'
+          questionOutputBlocked
+            ? 'Disabled: one or more child Outcomes already have outgoing connections'
+            : 'Aggregate output (all outcomes): connect to next Question or End'
         }
       />
     </div>

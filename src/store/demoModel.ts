@@ -1,0 +1,275 @@
+import type { ProjectModel } from '../types/model';
+
+export const DEMO_MODEL: ProjectModel = {
+  version: 1,
+  name: 'Cloud Platform & Compliance Programme',
+  nodes: [
+    {
+      id: 'start-1',
+      type: 'start',
+      position: { x: 40, y: 270 },
+      data: { label: 'Project Start' },
+    },
+    {
+      id: 'q-arch',
+      type: 'question',
+      position: { x: 250, y: 120 },
+      data: {
+        label: 'Cloud Migration Strategy',
+        description: 'Will legacy workloads be lifted-and-shifted, refactored, or fully rebuilt?',
+      },
+    },
+    {
+      id: 'o-lift',
+      type: 'outcome',
+      position: { x: 560, y: 20 },
+      data: {
+        label: 'Lift & Shift VMs',
+        probabilityPct: 45,
+        cost: 65000,
+      },
+    },
+    {
+      id: 'o-refactor',
+      type: 'outcome',
+      position: { x: 560, y: 130 },
+      data: {
+        label: 'Containerize Core Services',
+        probabilityPct: 35,
+        cost: 145000,
+      },
+    },
+    {
+      id: 'o-rebuild',
+      type: 'outcome',
+      position: { x: 560, y: 240 },
+      data: {
+        label: 'Cloud-Native Re-architecture',
+        probabilityPct: 20,
+        cost: 260000,
+      },
+    },
+    {
+      id: 'q-db',
+      type: 'question',
+      position: { x: 860, y: 60 },
+      data: {
+        label: 'Legacy Database Licensing',
+        description: 'Triggered if we keep legacy DB engine during Lift & Shift or Containerization.',
+      },
+    },
+    {
+      id: 'o-db-renew',
+      type: 'outcome',
+      position: { x: 1170, y: 10 },
+      data: {
+        label: 'Standard License Renewal',
+        probabilityPct: 60,
+        cost: 40000,
+      },
+    },
+    {
+      id: 'o-db-enterprise',
+      type: 'outcome',
+      position: { x: 1170, y: 115 },
+      data: {
+        label: 'Enterprise HA Add-on Required',
+        probabilityPct: 40,
+        cost: 110000,
+      },
+    },
+    {
+      id: 'q-sec',
+      type: 'question',
+      position: { x: 250, y: 410 },
+      data: {
+        label: 'Security & Compliance Audit',
+        description: 'Mandatory parallel workstream (AND chain) required regardless of migration path.',
+      },
+    },
+    {
+      id: 'o-sec-std',
+      type: 'outcome',
+      position: { x: 560, y: 365 },
+      data: {
+        label: 'Automated SOC2 Assessment',
+        probabilityPct: 65,
+        cost: 30000,
+      },
+    },
+    {
+      id: 'o-sec-pen',
+      type: 'outcome',
+      position: { x: 560, y: 475 },
+      data: {
+        label: 'External Red-Team & Remediation',
+        probabilityPct: 35,
+        cost: 85000,
+      },
+    },
+    {
+      id: 'q-remed',
+      type: 'question',
+      position: { x: 860, y: 465 },
+      data: {
+        label: 'Critical Findings Hardware HSM?',
+        description: 'If Red-Team identifies key-management gaps, dedicated HSMs may be needed.',
+      },
+    },
+    {
+      id: 'o-hsm-no',
+      type: 'outcome',
+      position: { x: 1170, y: 410 },
+      data: {
+        label: 'Software KMS Sufficient',
+        probabilityPct: 70,
+        cost: 15000,
+      },
+    },
+    {
+      id: 'o-hsm-yes',
+      type: 'outcome',
+      position: { x: 1170, y: 520 },
+      data: {
+        label: 'Dedicated CloudHSM Cluster',
+        probabilityPct: 30,
+        cost: 75000,
+      },
+    },
+    {
+      id: 'end-1',
+      type: 'end',
+      position: { x: 1470, y: 270 },
+      data: { label: 'Project Complete' },
+    },
+  ],
+  edges: [
+    {
+      id: 'e-start-arch',
+      source: 'start-1',
+      target: 'q-arch',
+      data: { kind: 'start-to-question' },
+    },
+    // AND link from Cloud Migration Strategy to Security & Compliance Audit
+    {
+      id: 'e-arch-and-sec',
+      source: 'q-arch',
+      target: 'q-sec',
+      data: { kind: 'question-to-question' },
+    },
+    // Cloud Migration Strategy outcomes
+    {
+      id: 'e-arch-lift',
+      source: 'q-arch',
+      target: 'o-lift',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-arch-refactor',
+      source: 'q-arch',
+      target: 'o-refactor',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-arch-rebuild',
+      source: 'q-arch',
+      target: 'o-rebuild',
+      data: { kind: 'question-to-outcome' },
+    },
+    // Lift & Shift and Refactor both lead to Legacy DB Licensing question
+    {
+      id: 'e-lift-db',
+      source: 'o-lift',
+      target: 'q-db',
+      data: { kind: 'outcome-to-question' },
+    },
+    {
+      id: 'e-refactor-db',
+      source: 'o-refactor',
+      target: 'q-db',
+      data: { kind: 'outcome-to-question' },
+    },
+    // Rebuild goes straight to End
+    {
+      id: 'e-rebuild-end',
+      source: 'o-rebuild',
+      target: 'end-1',
+      data: { kind: 'outcome-to-end' },
+    },
+    // DB outcomes
+    {
+      id: 'e-db-renew',
+      source: 'q-db',
+      target: 'o-db-renew',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-db-ent',
+      source: 'q-db',
+      target: 'o-db-enterprise',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-db-renew-end',
+      source: 'o-db-renew',
+      target: 'end-1',
+      data: { kind: 'outcome-to-end' },
+    },
+    {
+      id: 'e-db-ent-end',
+      source: 'o-db-enterprise',
+      target: 'end-1',
+      data: { kind: 'outcome-to-end' },
+    },
+    // Security outcomes
+    {
+      id: 'e-sec-std',
+      source: 'q-sec',
+      target: 'o-sec-std',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-sec-pen',
+      source: 'q-sec',
+      target: 'o-sec-pen',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-sec-std-end',
+      source: 'o-sec-std',
+      target: 'end-1',
+      data: { kind: 'outcome-to-end' },
+    },
+    {
+      id: 'e-sec-pen-remed',
+      source: 'o-sec-pen',
+      target: 'q-remed',
+      data: { kind: 'outcome-to-question' },
+    },
+    // Remediation outcomes
+    {
+      id: 'e-remed-no',
+      source: 'q-remed',
+      target: 'o-hsm-no',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-remed-yes',
+      source: 'q-remed',
+      target: 'o-hsm-yes',
+      data: { kind: 'question-to-outcome' },
+    },
+    {
+      id: 'e-hsm-no-end',
+      source: 'o-hsm-no',
+      target: 'end-1',
+      data: { kind: 'outcome-to-end' },
+    },
+    {
+      id: 'e-hsm-yes-end',
+      source: 'o-hsm-yes',
+      target: 'end-1',
+      data: { kind: 'outcome-to-end' },
+    },
+  ],
+};

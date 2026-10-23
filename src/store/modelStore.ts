@@ -37,6 +37,12 @@ export interface ClipboardPayload {
   pasteCount: number;
 }
 
+export function computeProbabilityStrokeWidth(probabilityPct: number): number {
+  const clamped = Math.max(0, Math.min(100, Number(probabilityPct) || 0));
+  // Scales smoothly from 1.25px (0%) up to 6.5px (100%)
+  return Math.round((1.25 + (clamped / 100) * 5.25) * 100) / 100;
+}
+
 export function decorateEdge(
   edge: ModelEdge,
   nodes: ModelNode[]
@@ -55,15 +61,24 @@ export function decorateEdge(
   const isQuestionEnd = kind === 'question-to-end';
   const isEnd = kind === 'outcome-to-end';
   const isOr = kind === 'question-to-outcome';
+  const isFromOutcome =
+    kind === 'outcome-to-question' || kind === 'outcome-to-end';
+
+  // Determine the outcome node associated with this edge (if any) to scale line width by probability
+  let associatedOutcome: OutcomeFlowNode | undefined;
+  if (isOr && tgt?.type === 'outcome') {
+    associatedOutcome = tgt as OutcomeFlowNode;
+  } else if (isFromOutcome && src?.type === 'outcome') {
+    associatedOutcome = src as OutcomeFlowNode;
+  }
 
   let label: string | undefined;
   if (isAnd) {
     label = 'ALL →';
   } else if (isQuestionEnd) {
     label = 'ALL';
-  } else if (isOr && tgt?.type === 'outcome') {
-    const o = tgt as OutcomeFlowNode;
-    label = `${o.data.probabilityPct}%`;
+  } else if (isOr && associatedOutcome) {
+    label = `${associatedOutcome.data.probabilityPct}%`;
   }
 
   const strokeColor = isAnd
@@ -75,6 +90,16 @@ export function decorateEdge(
         : isEnd
           ? '#64748b'
           : '#94a3b8';
+
+  const strokeWidth = associatedOutcome
+    ? computeProbabilityStrokeWidth(associatedOutcome.data.probabilityPct)
+    : isAnd || isQuestionEnd
+      ? 3.5
+      : 2.5;
+
+  const isZeroProb =
+    associatedOutcome !== undefined &&
+    (Number(associatedOutcome.data.probabilityPct) || 0) <= 0;
 
   return {
     ...edge,
@@ -98,14 +123,15 @@ export function decorateEdge(
     labelBgBorderRadius: 4,
     style: {
       stroke: strokeColor,
-      strokeWidth: isAnd || isQuestionEnd ? 2.2 : 2,
-      strokeDasharray: isAnd ? '6 4' : undefined,
+      strokeWidth,
+      strokeOpacity: isZeroProb ? 0.35 : 0.95,
+      strokeDasharray: isAnd ? '6 4' : isZeroProb ? '3 3' : undefined,
     },
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: strokeColor,
-      width: 18,
-      height: 18,
+      width: 14,
+      height: 14,
     },
     data: { kind },
   };

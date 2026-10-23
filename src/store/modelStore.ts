@@ -12,6 +12,7 @@ import {
   formatCurrency,
   type CurrencyCode,
   type EdgeKind,
+  type LayoutAlgorithm,
   type ModelEdge,
   type ModelNode,
   type ModelNodeType,
@@ -157,9 +158,11 @@ interface ModelStoreState {
   simulationResult: SimulationResult | null;
   connectionError: string | null;
   layoutVersion: number;
+  layoutAlgorithm: LayoutAlgorithm;
 
   setModelName: (name: string) => void;
   setCurrency: (currency: CurrencyCode) => void;
+  setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void;
   setActiveTab: (tab: ActiveTab) => void;
   setTrials: (trials: number) => void;
   clearConnectionError: () => void;
@@ -178,7 +181,7 @@ interface ModelStoreState {
 
   addOutcomeForQuestion: (questionId: string) => void;
   splitQuestionProbabilitiesEvenly: (questionId: string) => void;
-  autoLayout: () => void;
+  autoLayout: (algorithm?: LayoutAlgorithm) => void;
 
   runSimulation: (switchTab?: boolean) => boolean;
   resetToNewModel: () => void;
@@ -212,11 +215,17 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
   simulationResult: initialSimulation,
   connectionError: null,
   layoutVersion: 0,
+  layoutAlgorithm: 'layered-lr',
 
   setModelName: (name) => {
     set({ modelName: name });
     const { currency, nodes, edges } = get();
     persistDraft(name, currency, nodes, edges);
+  },
+
+  setLayoutAlgorithm: (algorithm) => {
+    set({ layoutAlgorithm: algorithm });
+    get().autoLayout(algorithm);
   },
 
   setCurrency: (currency) => {
@@ -367,6 +376,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
         position: pos,
         data: {
           label: `Outcome ${countOfType}`,
+          description: '',
           probabilityPct: 50,
           cost: 25000,
         },
@@ -484,6 +494,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       },
       data: {
         label: `Option ${outcomeIndex}`,
+        description: '',
         probabilityPct: defaultProb,
         cost: 25000 * outcomeIndex,
       },
@@ -549,11 +560,20 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     persistDraft(modelName, currency, nextNodes, nextEdges);
   },
 
-  autoLayout: () => {
-    const { nodes, edges, modelName, currency, layoutVersion } = get();
-    const laidOutNodes = computeAutoLayout(nodes, edges);
+  autoLayout: (algorithmOverride) => {
+    const {
+      nodes,
+      edges,
+      modelName,
+      currency,
+      layoutVersion,
+      layoutAlgorithm,
+    } = get();
+    const algo = algorithmOverride ?? layoutAlgorithm;
+    const laidOutNodes = computeAutoLayout(nodes, edges, algo);
     set({
       nodes: laidOutNodes,
+      layoutAlgorithm: algo,
       layoutVersion: layoutVersion + 1,
     });
     persistDraft(modelName, currency, laidOutNodes, edges);

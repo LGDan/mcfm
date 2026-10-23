@@ -2,8 +2,10 @@ import { useRef, useState } from 'react';
 import { useModelStore } from '../store/modelStore';
 import {
   CURRENCY_OPTIONS,
+  LAYOUT_ALGORITHMS,
   formatCurrency,
   type CurrencyCode,
+  type LayoutAlgorithm,
 } from '../types/model';
 
 export function Toolbar() {
@@ -19,6 +21,8 @@ export function Toolbar() {
   const validation = useModelStore((s) => s.validation);
   const simulationResult = useModelStore((s) => s.simulationResult);
   const runSimulation = useModelStore((s) => s.runSimulation);
+  const layoutAlgorithm = useModelStore((s) => s.layoutAlgorithm);
+  const setLayoutAlgorithm = useModelStore((s) => s.setLayoutAlgorithm);
   const autoLayout = useModelStore((s) => s.autoLayout);
   const resetToNewModel = useModelStore((s) => s.resetToNewModel);
   const loadDemoModel = useModelStore((s) => s.loadDemoModel);
@@ -139,14 +143,31 @@ export function Toolbar() {
         <div className="toolbar-divider" />
 
         {activeTab === 'editor' && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={autoLayout}
-            title="Automatically arrange nodes left-to-right by DAG rank"
-          >
-            Auto-Layout
-          </button>
+          <div className="layout-control-group">
+            <select
+              className="layout-select"
+              value={layoutAlgorithm}
+              onChange={(e) =>
+                setLayoutAlgorithm(e.target.value as LayoutAlgorithm)
+              }
+              aria-label="Auto-layout algorithm"
+              title="Choose auto-layout algorithm"
+            >
+              {LAYOUT_ALGORITHMS.map((algo) => (
+                <option key={algo.id} value={algo.id}>
+                  {algo.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => autoLayout()}
+              title="Arrange nodes using the selected layout algorithm"
+            >
+              Auto-Layout
+            </button>
+          </div>
         )}
 
         <button

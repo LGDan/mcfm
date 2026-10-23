@@ -14,6 +14,7 @@ import { formatCurrency } from '../types/model';
 interface CompiledOutcome {
   id: string;
   label: string;
+  description?: string;
   probability: number; // 0..1
   probabilityPct: number;
   cost: number;
@@ -64,6 +65,7 @@ export function compileGraph(nodes: ModelNode[], edges: ModelEdge[]): CompiledGr
       list.push({
         id: oNode.id,
         label: oNode.data.label,
+        description: oNode.data.description,
         probability: Math.max(0, Number(oNode.data.probabilityPct) || 0) / 100,
         probabilityPct: Math.max(0, Number(oNode.data.probabilityPct) || 0),
         cost: Math.max(0, Number(oNode.data.cost) || 0),
@@ -216,6 +218,7 @@ export function runMonteCarloSimulation(
       const stat: OutcomeDriverStat = {
         outcomeId: o.id,
         outcomeLabel: o.label,
+        outcomeDescription: o.description,
         questionId: qId,
         questionLabel: qMeta.label,
         configuredProbPct: o.probabilityPct,

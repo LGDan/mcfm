@@ -4,6 +4,45 @@ export type ModelNodeType = 'start' | 'question' | 'outcome' | 'end';
 
 export type CurrencyCode = 'GBP' | 'USD' | 'EUR' | 'AUD' | 'CAD' | 'JPY';
 
+export type LayoutAlgorithm =
+  | 'layered-lr'
+  | 'layered-tb'
+  | 'tree-lr'
+  | 'compact-lr'
+  | 'radial';
+
+export const LAYOUT_ALGORITHMS: {
+  id: LayoutAlgorithm;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: 'layered-lr',
+    label: 'Layered DAG (Left → Right)',
+    description: 'Sugiyama-style horizontal ranks with barycenter alignment',
+  },
+  {
+    id: 'tree-lr',
+    label: 'Decision Tree (Subtree Balanced)',
+    description: 'Allocates vertical space proportional to downstream branch subtrees',
+  },
+  {
+    id: 'compact-lr',
+    label: 'Compact Swimlanes (By Node Type)',
+    description: 'Tightly packed horizontal ranks grouped by Question & Outcome pairs',
+  },
+  {
+    id: 'layered-tb',
+    label: 'Top → Bottom Hierarchy',
+    description: 'Vertical flowchart arrangement from top to bottom',
+  },
+  {
+    id: 'radial',
+    label: 'Radial Concentric Rings',
+    description: 'Places Start at center and radiates Questions & Outcomes outward',
+  },
+];
+
 export const CURRENCY_OPTIONS: {
   code: CurrencyCode;
   symbol: string;
@@ -34,6 +73,7 @@ export interface QuestionNodeData extends Record<string, unknown> {
 
 export interface OutcomeNodeData extends Record<string, unknown> {
   label: string;
+  description?: string;
   probabilityPct: number; // 0..100
   cost: number; // >= 0
 }
@@ -95,6 +135,7 @@ export interface HistogramBin {
 export interface OutcomeDriverStat {
   outcomeId: string;
   outcomeLabel: string;
+  outcomeDescription?: string;
   questionId: string;
   questionLabel: string;
   configuredProbPct: number;

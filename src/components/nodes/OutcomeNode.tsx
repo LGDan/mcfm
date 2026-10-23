@@ -21,6 +21,9 @@ export function OutcomeNode({ data, selected }: NodeProps<OutcomeFlowNode>) {
       </div>
 
       <div className="flow-node-title">{data.label || 'Outcome'}</div>
+      {data.description && (
+        <div className="flow-node-desc">{data.description}</div>
+      )}
 
       <div className="outcome-cost-row">
         <span className="outcome-cost-label">Cost impact</span>

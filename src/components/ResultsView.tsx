@@ -364,7 +364,14 @@ export function ResultsView() {
               {simulationResult.outcomeDrivers.map((d) => (
                 <tr key={d.outcomeId}>
                   <td className="td-question">{d.questionLabel}</td>
-                  <td className="td-outcome">{d.outcomeLabel}</td>
+                  <td className="td-outcome">
+                    <div>{d.outcomeLabel}</div>
+                    {d.outcomeDescription && (
+                      <div className="td-outcome-desc">
+                        {d.outcomeDescription}
+                      </div>
+                    )}
+                  </td>
                   <td>{d.configuredProbPct}%</td>
                   <td>{formatCurrency(d.cost, currency)}</td>
                   <td>

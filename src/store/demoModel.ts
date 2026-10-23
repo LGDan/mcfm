@@ -3,6 +3,7 @@ import type { ProjectModel } from '../types/model';
 export const DEMO_MODEL: ProjectModel = {
   version: 1,
   name: 'Cloud Platform & Compliance Programme',
+  currency: 'GBP',
   nodes: [
     {
       id: 'start-1',
@@ -25,6 +26,7 @@ export const DEMO_MODEL: ProjectModel = {
       position: { x: 560, y: 20 },
       data: {
         label: 'Lift & Shift VMs',
+        description: 'Rehost existing VMs onto cloud IaaS with minimal code changes.',
         probabilityPct: 45,
         cost: 65000,
       },
@@ -32,9 +34,10 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-refactor',
       type: 'outcome',
-      position: { x: 560, y: 130 },
+      position: { x: 560, y: 145 },
       data: {
         label: 'Containerize Core Services',
+        description: 'Package core apps into Kubernetes; keep existing relational DB.',
         probabilityPct: 35,
         cost: 145000,
       },
@@ -42,9 +45,10 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-rebuild',
       type: 'outcome',
-      position: { x: 560, y: 240 },
+      position: { x: 560, y: 270 },
       data: {
         label: 'Cloud-Native Re-architecture',
+        description: 'Full serverless & managed database rewrite; retires legacy DB.',
         probabilityPct: 20,
         cost: 260000,
       },
@@ -64,6 +68,7 @@ export const DEMO_MODEL: ProjectModel = {
       position: { x: 1170, y: 10 },
       data: {
         label: 'Standard License Renewal',
+        description: 'Existing core-count license covers cloud vCPUs.',
         probabilityPct: 60,
         cost: 40000,
       },
@@ -71,9 +76,10 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-db-enterprise',
       type: 'outcome',
-      position: { x: 1170, y: 115 },
+      position: { x: 1170, y: 135 },
       data: {
         label: 'Enterprise HA Add-on Required',
+        description: 'Vendor audit requires multi-AZ active-passive licensing tier.',
         probabilityPct: 40,
         cost: 110000,
       },
@@ -81,7 +87,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'q-sec',
       type: 'question',
-      position: { x: 250, y: 410 },
+      position: { x: 250, y: 420 },
       data: {
         label: 'Security & Compliance Audit',
         description: 'Mandatory parallel workstream (AND chain) required regardless of migration path.',
@@ -90,9 +96,10 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-sec-std',
       type: 'outcome',
-      position: { x: 560, y: 365 },
+      position: { x: 560, y: 385 },
       data: {
         label: 'Automated SOC2 Assessment',
+        description: 'Compliance platform + internal security review.',
         probabilityPct: 65,
         cost: 30000,
       },
@@ -100,9 +107,10 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-sec-pen',
       type: 'outcome',
-      position: { x: 560, y: 475 },
+      position: { x: 560, y: 510 },
       data: {
         label: 'External Red-Team & Remediation',
+        description: 'Full adversarial penetration test by accredited CREST consultancy.',
         probabilityPct: 35,
         cost: 85000,
       },
@@ -110,7 +118,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'q-remed',
       type: 'question',
-      position: { x: 860, y: 465 },
+      position: { x: 860, y: 485 },
       data: {
         label: 'Critical Findings Hardware HSM?',
         description: 'If Red-Team identifies key-management gaps, dedicated HSMs may be needed.',
@@ -119,9 +127,10 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-hsm-no',
       type: 'outcome',
-      position: { x: 1170, y: 410 },
+      position: { x: 1170, y: 420 },
       data: {
         label: 'Software KMS Sufficient',
+        description: 'Standard cloud KMS key rotation satisfies auditors.',
         probabilityPct: 70,
         cost: 15000,
       },
@@ -129,9 +138,10 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'o-hsm-yes',
       type: 'outcome',
-      position: { x: 1170, y: 520 },
+      position: { x: 1170, y: 545 },
       data: {
         label: 'Dedicated CloudHSM Cluster',
+        description: 'FIPS 140-3 Level 3 dedicated hardware security modules required.',
         probabilityPct: 30,
         cost: 75000,
       },
@@ -139,7 +149,7 @@ export const DEMO_MODEL: ProjectModel = {
     {
       id: 'end-1',
       type: 'end',
-      position: { x: 1470, y: 270 },
+      position: { x: 1480, y: 270 },
       data: { label: 'Project Complete' },
     },
   ],
@@ -150,14 +160,12 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'q-arch',
       data: { kind: 'start-to-question' },
     },
-    // AND link from Cloud Migration Strategy to Security & Compliance Audit
     {
       id: 'e-arch-and-sec',
       source: 'q-arch',
       target: 'q-sec',
       data: { kind: 'question-to-question' },
     },
-    // Cloud Migration Strategy outcomes
     {
       id: 'e-arch-lift',
       source: 'q-arch',
@@ -176,7 +184,6 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'o-rebuild',
       data: { kind: 'question-to-outcome' },
     },
-    // Lift & Shift and Refactor both lead to Legacy DB Licensing question
     {
       id: 'e-lift-db',
       source: 'o-lift',
@@ -189,14 +196,12 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'q-db',
       data: { kind: 'outcome-to-question' },
     },
-    // Rebuild goes straight to End
     {
       id: 'e-rebuild-end',
       source: 'o-rebuild',
       target: 'end-1',
       data: { kind: 'outcome-to-end' },
     },
-    // DB outcomes
     {
       id: 'e-db-renew',
       source: 'q-db',
@@ -221,7 +226,6 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'end-1',
       data: { kind: 'outcome-to-end' },
     },
-    // Security outcomes
     {
       id: 'e-sec-std',
       source: 'q-sec',
@@ -246,7 +250,6 @@ export const DEMO_MODEL: ProjectModel = {
       target: 'q-remed',
       data: { kind: 'outcome-to-question' },
     },
-    // Remediation outcomes
     {
       id: 'e-remed-no',
       source: 'q-remed',

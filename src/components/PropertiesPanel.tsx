@@ -182,6 +182,7 @@ export function PropertiesPanel() {
                       updateNodeData(o.id, { label: e.target.value })
                     }
                     aria-label="Outcome label"
+                    placeholder="Outcome title"
                   />
                   <button
                     type="button"
@@ -191,6 +192,18 @@ export function PropertiesPanel() {
                   >
                     Inspect
                   </button>
+                </div>
+
+                <div className="outcome-inline-desc">
+                  <input
+                    type="text"
+                    value={o.data.description || ''}
+                    onChange={(e) =>
+                      updateNodeData(o.id, { description: e.target.value })
+                    }
+                    placeholder="Optional description / assumptions..."
+                    aria-label="Outcome description"
+                  />
                 </div>
 
                 <div className="outcome-inline-grid">
@@ -323,6 +336,19 @@ export function PropertiesPanel() {
               value={oNode.data.label}
               onChange={(e) =>
                 updateNodeData(oNode.id, { label: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="prop-field">
+            <label htmlFor="o-desc">Description / Cost Assumptions</label>
+            <textarea
+              id="o-desc"
+              rows={3}
+              placeholder="Explain what this outcome entails and what drives its cost..."
+              value={oNode.data.description || ''}
+              onChange={(e) =>
+                updateNodeData(oNode.id, { description: e.target.value })
               }
             />
           </div>

@@ -1,8 +1,9 @@
-import type {
-  LayoutAlgorithm,
-  ModelEdge,
-  ModelNode,
-  OutcomeDisplayMode,
+import {
+  isOutcomeNodeType,
+  type LayoutAlgorithm,
+  type ModelEdge,
+  type ModelNode,
+  type OutcomeDisplayMode,
 } from '../types/model';
 
 function getNodeHeight(
@@ -20,6 +21,12 @@ function getNodeHeight(
   if (node.type === 'outcome') {
     return node.data.description ? 148 : 120;
   }
+  if (node.type === 'advanced-outcome') {
+    const potCount = node.data.pots?.length ?? 2;
+    return 188 + potCount * 20 + (node.data.capexOpexEnabled ? 32 : 0);
+  }
+  if (node.type === 'variable') return 176;
+  if (node.type === 'note') return 118;
   return 84;
 }
 
@@ -53,7 +60,7 @@ function buildLayeredStructure(
   for (const e of edges) {
     const src = nodeMap.get(e.source);
     const tgt = nodeMap.get(e.target);
-    if (src?.type === 'question' && tgt?.type === 'outcome') {
+    if (src?.type === 'question' && isOutcomeNodeType(tgt?.type)) {
       outcomeCounts.set(src.id, (outcomeCounts.get(src.id) ?? 0) + 1);
       parentQuestionByOutcome.set(tgt.id, src.id);
     }
@@ -61,12 +68,18 @@ function buildLayeredStructure(
 
   // In nested mode, parented outcomes are embedded inside their parent Question node,
   // so we exclude them from top-level layout nodes and collapse `Q -> O -> Target` into `Q -> Target`.
-  const activeNodes =
-    mode === 'nested'
-      ? nodes.filter(
-          (n) => !(n.type === 'outcome' && parentQuestionByOutcome.has(n.id))
-        )
-      : nodes;
+  // Variable and Note nodes sit outside the DAG and are placed afterwards.
+  const activeNodes = nodes.filter((n) => {
+    if (n.type === 'variable' || n.type === 'note') return false;
+    if (
+      mode === 'nested' &&
+      isOutcomeNodeType(n.type) &&
+      parentQuestionByOutcome.has(n.id)
+    ) {
+      return false;
+    }
+    return true;
+  });
 
   const activeNodeMap = new Map<string, ModelNode>();
   const incoming = new Map<string, string[]>();
@@ -82,6 +95,7 @@ function buildLayeredStructure(
 
   const edgePairs = new Set<string>();
   for (const e of edges) {
+    if (e.data?.kind === 'note-link') continue;
     let u = e.source;
     const v = e.target;
 
@@ -193,7 +207,7 @@ function syncNestedOutcomePositions(
     if (directPos) {
       return { ...n, position: directPos };
     }
-    if (mode === 'nested' && n.type === 'outcome') {
+    if (mode === 'nested' && isOutcomeNodeType(n.type)) {
       const parentId = parentQuestionByOutcome.get(n.id);
       const parentPos = parentId ? finalPositionById.get(parentId) : undefined;
       if (parentId && parentPos) {
@@ -563,6 +577,66 @@ function layoutRadial(
   );
 }
 
+function placeAuxiliaryNodes(
+  original: ModelNode[],
+  laidOut: ModelNode[],
+  edges: ModelEdge[]
+): ModelNode[] {
+  const posById = new Map(laidOut.map((n) => [n.id, n.position]));
+
+  let minX = Infinity;
+  let minY = Infinity;
+  for (const n of laidOut) {
+    if (n.type === 'variable' || n.type === 'note') continue;
+    minX = Math.min(minX, n.position.x);
+    minY = Math.min(minY, n.position.y);
+  }
+  if (!Number.isFinite(minX)) minX = 60;
+  if (!Number.isFinite(minY)) minY = 80;
+
+  const variables = original.filter((n) => n.type === 'variable');
+  let vx = minX;
+  const vy = Math.max(16, minY - 210);
+  for (const v of variables) {
+    posById.set(v.id, { x: vx, y: vy });
+    vx += 260;
+  }
+
+  const notes = original.filter((n) => n.type === 'note');
+  for (const note of notes) {
+    const linked = edges.find(
+      (e) =>
+        e.data?.kind === 'note-link' &&
+        (e.source === note.id || e.target === note.id)
+    );
+    if (linked) {
+      const otherId = linked.source === note.id ? linked.target : linked.source;
+      const otherPos = posById.get(otherId);
+      if (otherPos) {
+        const previous = note.position;
+        const otherPrev = original.find((n) => n.id === otherId)?.position;
+        if (otherPrev) {
+          posById.set(note.id, {
+            x: otherPos.x + (previous.x - otherPrev.x),
+            y: otherPos.y + (previous.y - otherPrev.y),
+          });
+        } else {
+          posById.set(note.id, { x: otherPos.x, y: otherPos.y - 140 });
+        }
+        continue;
+      }
+    }
+    if (!posById.has(note.id)) {
+      posById.set(note.id, note.position);
+    }
+  }
+
+  return original.map((n) => {
+    const pos = posById.get(n.id);
+    return pos ? { ...n, position: pos } : n;
+  });
+}
+
 export function computeAutoLayout(
   nodes: ModelNode[],
   edges: ModelEdge[],
@@ -571,17 +645,24 @@ export function computeAutoLayout(
 ): ModelNode[] {
   if (nodes.length === 0) return nodes;
 
+  let laidOut: ModelNode[];
   switch (algorithm) {
     case 'tree-lr':
-      return layoutSubtreeBalancedLR(nodes, edges, mode);
+      laidOut = layoutSubtreeBalancedLR(nodes, edges, mode);
+      break;
     case 'compact-lr':
-      return layoutCompactLR(nodes, edges, mode);
+      laidOut = layoutCompactLR(nodes, edges, mode);
+      break;
     case 'layered-tb':
-      return layoutLayeredTB(nodes, edges, mode);
+      laidOut = layoutLayeredTB(nodes, edges, mode);
+      break;
     case 'radial':
-      return layoutRadial(nodes, edges, mode);
+      laidOut = layoutRadial(nodes, edges, mode);
+      break;
     case 'layered-lr':
     default:
-      return layoutLayeredLR(nodes, edges, mode);
+      laidOut = layoutLayeredLR(nodes, edges, mode);
   }
+
+  return placeAuxiliaryNodes(nodes, laidOut, edges);
 }

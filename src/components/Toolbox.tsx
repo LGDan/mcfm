@@ -5,7 +5,10 @@ import {
   mdiChevronDoubleLeft,
   mdiChevronDoubleRight,
   mdiFlagCheckered,
+  mdiFunctionVariant,
   mdiHelpRhombusOutline,
+  mdiLayersTripleOutline,
+  mdiNoteTextOutline,
   mdiPlayCircleOutline,
   mdiSourceBranch,
 } from '@mdi/js';
@@ -42,6 +45,27 @@ const PALETTE_ITEMS: PaletteItem[] = [
     subtitle: 'Probability % & fixed cost',
     accentClass: 'palette-outcome',
     icon: mdiSourceBranch,
+  },
+  {
+    type: 'advanced-outcome',
+    title: 'Advanced Outcome',
+    subtitle: 'Pots, L/M/H, formulas, opex',
+    accentClass: 'palette-advanced',
+    icon: mdiLayersTripleOutline,
+  },
+  {
+    type: 'variable',
+    title: 'Variable Node',
+    subtitle: 'Fixed, slider, or random range',
+    accentClass: 'palette-variable',
+    icon: mdiFunctionVariant,
+  },
+  {
+    type: 'note',
+    title: 'Note Node',
+    subtitle: 'Editorial annotation (non-DAG)',
+    accentClass: 'palette-note',
+    icon: mdiNoteTextOutline,
   },
   {
     type: 'end',
@@ -194,6 +218,14 @@ export function Toolbox() {
           <li>
             <strong>Outcome → Question / End</strong>: Branch-specific
             continuation (disables parent question connector)
+          </li>
+          <li>
+            <strong>Note ↔ any</strong>: Straight dashed annotation link,
+            ignored by simulation
+          </li>
+          <li>
+            <strong>Variable</strong>: Ledger node referenced in Advanced
+            Outcome formulas
           </li>
         </ul>
       </div>

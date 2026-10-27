@@ -9,22 +9,33 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import {
+  createDefaultPots,
   formatCurrency,
+  isOutcomeNodeType,
+  type AdvancedOutcomeFlowNode,
+  type AnyOutcomeFlowNode,
   type CurrencyCode,
   type EdgeKind,
   type LayoutAlgorithm,
   type ModelEdge,
   type ModelNode,
   type ModelNodeType,
+  type NoteFlowNode,
   type OutcomeDisplayMode,
   type OutcomeFlowNode,
   type ProjectModel,
   type SimulationResult,
   type ValidationResult,
+  type VariableFlowNode,
 } from '../types/model';
 import { canConnectNodes, inferEdgeKind, validateModel } from '../sim/validate';
 import { runMonteCarloSimulation } from '../sim/monteCarlo';
 import { computeAutoLayout } from '../sim/autoLayout';
+import {
+  buildCsvChainGraph,
+  type CsvChainRow,
+} from '../sim/csvChainImport';
+import { sanitizeVariableName } from '../sim/formulaEvaluator';
 import { DEMO_MODEL } from './demoModel';
 
 const STORAGE_KEY = 'mc-modeller:v2';
@@ -57,6 +68,7 @@ export function decorateEdge(
     ) ??
     'start-to-question';
 
+  const isNote = kind === 'note-link';
   const isAnd = kind === 'question-to-question';
   const isQuestionEnd = kind === 'question-to-end';
   const isEnd = kind === 'outcome-to-end';
@@ -65,11 +77,11 @@ export function decorateEdge(
     kind === 'outcome-to-question' || kind === 'outcome-to-end';
 
   // Determine the outcome node associated with this edge (if any) to scale line width by probability
-  let associatedOutcome: OutcomeFlowNode | undefined;
-  if (isOr && tgt?.type === 'outcome') {
-    associatedOutcome = tgt as OutcomeFlowNode;
-  } else if (isFromOutcome && src?.type === 'outcome') {
-    associatedOutcome = src as OutcomeFlowNode;
+  let associatedOutcome: AnyOutcomeFlowNode | undefined;
+  if (isOr && isOutcomeNodeType(tgt?.type)) {
+    associatedOutcome = tgt as AnyOutcomeFlowNode;
+  } else if (isFromOutcome && isOutcomeNodeType(src?.type)) {
+    associatedOutcome = src as AnyOutcomeFlowNode;
   }
 
   let label: string | undefined;
@@ -100,6 +112,24 @@ export function decorateEdge(
   const isZeroProb =
     associatedOutcome !== undefined &&
     (Number(associatedOutcome.data.probabilityPct) || 0) <= 0;
+
+  if (isNote) {
+    return {
+      ...edge,
+      type: 'note-edge',
+      zIndex: 8,
+      interactionWidth: 24,
+      animated: false,
+      label: undefined,
+      style: {
+        stroke: '#767065',
+        strokeWidth: 1.6,
+        strokeDasharray: '5 4',
+      },
+      markerEnd: undefined,
+      data: { kind },
+    };
+  }
 
   return {
     ...edge,
@@ -270,7 +300,8 @@ interface ModelStoreState {
   pasteClipboard: (anchorPosition?: { x: number; y: number }) => string[];
   duplicateNodes: (explicitNodeIds?: string[]) => string[];
 
-  addOutcomeForQuestion: (questionId: string) => void;
+  addOutcomeForQuestion: (questionId: string, advanced?: boolean) => void;
+  importCsvChain: (rows: CsvChainRow[], mode: 'replace' | 'append') => void;
   splitQuestionProbabilitiesEvenly: (questionId: string) => void;
   rebalanceOutcomeProbability: (outcomeId: string, newProbPct: number) => void;
   autoLayout: (algorithm?: LayoutAlgorithm) => void;
@@ -563,6 +594,66 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
           cost: 25000,
         },
       };
+    } else if (type === 'advanced-outcome') {
+      const pots = createDefaultPots();
+      const advNode: AdvancedOutcomeFlowNode = {
+        id,
+        type: 'advanced-outcome',
+        position: pos,
+        selected: true,
+        data: {
+          label: `Advanced Outcome ${countOfType}`,
+          description: '',
+          probabilityPct: 50,
+          cost: pots.reduce((acc, p) => acc + p.fixedCost, 0),
+          pots,
+          capexOpexEnabled: false,
+          opexAnnualCost: 8000,
+          opexInflationPct: 3.5,
+          opexPotId: 'external',
+        },
+      };
+      newNode = advNode;
+    } else if (type === 'variable') {
+      const existingNames = new Set(
+        nodes
+          .filter((n): n is VariableFlowNode => n.type === 'variable')
+          .map((n) => n.data.name)
+      );
+      let name = sanitizeVariableName(`variable_${countOfType}`);
+      let suffix = countOfType;
+      while (existingNames.has(name)) {
+        suffix += 1;
+        name = sanitizeVariableName(`variable_${suffix}`);
+      }
+      const varNode: VariableFlowNode = {
+        id,
+        type: 'variable',
+        position: pos,
+        selected: true,
+        data: {
+          name,
+          label: `Variable ${countOfType}`,
+          mode: 'fixed',
+          fixedValue: 100,
+          minValue: 0,
+          maxValue: 200,
+          sliderValue: 100,
+        },
+      };
+      newNode = varNode;
+    } else if (type === 'note') {
+      const noteNode: NoteFlowNode = {
+        id,
+        type: 'note',
+        position: pos,
+        selected: true,
+        data: {
+          label: `Note ${countOfType}`,
+          description: 'Add editorial commentary or assumptions here.',
+        },
+      };
+      newNode = noteNode;
     } else {
       newNode = {
         id,
@@ -593,11 +684,29 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     const { nodes, edges, modelName, currency } = get();
     const nextNodes = nodes.map((n) => {
       if (n.id !== nodeId) return n;
+      const nextPatch = { ...patch };
+      if (n.type === 'variable' && typeof nextPatch.name === 'string') {
+        const existingNames = new Set(
+          nodes
+            .filter(
+              (other): other is VariableFlowNode =>
+                other.type === 'variable' && other.id !== nodeId
+            )
+            .map((other) => other.data.name)
+        );
+        let name = sanitizeVariableName(nextPatch.name);
+        if (existingNames.has(name)) {
+          let i = 2;
+          while (existingNames.has(`${name}_${i}`)) i += 1;
+          name = `${name}_${i}`;
+        }
+        nextPatch.name = name;
+      }
       return {
         ...n,
         data: {
           ...n.data,
-          ...patch,
+          ...nextPatch,
         },
       } as ModelNode;
     });
@@ -631,7 +740,9 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
           e.target !== outcomeId
       )
       .map((e) => e.target)
-      .filter((id) => nodes.some((n) => n.id === id && n.type === 'outcome'));
+      .filter((id) =>
+        nodes.some((n) => n.id === id && isOutcomeNodeType(n.type))
+      );
 
     if (siblingIds.length === 0) {
       get().updateNodeData(outcomeId, { probabilityPct: clampedTarget });
@@ -640,7 +751,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
 
     const remainder = Math.max(0, 100 - clampedTarget);
     const siblingNodes = siblingIds.map(
-      (id) => nodes.find((n) => n.id === id) as OutcomeFlowNode
+      (id) => nodes.find((n) => n.id === id) as AnyOutcomeFlowNode
     );
     const currentSiblingsSum = siblingNodes.reduce(
       (acc, s) => acc + Math.max(0, Number(s.data.probabilityPct) || 0),
@@ -677,14 +788,14 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     });
 
     const nextNodes = nodes.map((n) => {
-      if (n.type !== 'outcome' || !newProbById.has(n.id)) return n;
+      if (!isOutcomeNodeType(n.type) || !newProbById.has(n.id)) return n;
       return {
         ...n,
         data: {
           ...n.data,
           probabilityPct: newProbById.get(n.id)!,
         },
-      } as OutcomeFlowNode;
+      } as AnyOutcomeFlowNode;
     });
 
     const nextEdges = hydrateEdges(nextNodes, edges);
@@ -943,15 +1054,17 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     return get().pasteClipboard();
   },
 
-  addOutcomeForQuestion: (questionId) => {
+  addOutcomeForQuestion: (questionId, advanced = false) => {
     const { nodes, edges, modelName, currency } = get();
     const qNode = nodes.find((n) => n.id === questionId && n.type === 'question');
     if (!qNode) return;
 
     const existingOutcomes = edges
-      .filter((e) => e.source === questionId)
-      .map((e) => nodes.find((n) => n.id === e.target && n.type === 'outcome'))
-      .filter((n): n is OutcomeFlowNode => Boolean(n));
+      .filter((e) => e.source === questionId && e.data?.kind === 'question-to-outcome')
+      .map((e) =>
+        nodes.find((n) => n.id === e.target && isOutcomeNodeType(n.type))
+      )
+      .filter((n): n is AnyOutcomeFlowNode => Boolean(n));
 
     const currentSum = existingOutcomes.reduce(
       (acc, o) => acc + (Number(o.data.probabilityPct) || 0),
@@ -962,24 +1075,43 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
       existingOutcomes.length === 0 ? 100 : remainingProb > 0 ? remainingProb : 0;
 
     const outcomeIndex = existingOutcomes.length + 1;
-    const outcomeId = `outcome-${Date.now().toString(36)}-${Math.random()
+    const outcomeId = `${advanced ? 'adv-outcome' : 'outcome'}-${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 5)}`;
 
-    const newOutcome: OutcomeFlowNode = {
-      id: outcomeId,
-      type: 'outcome',
-      position: {
-        x: qNode.position.x + 310,
-        y: qNode.position.y + (outcomeIndex - 1) * 110 - 30,
-      },
-      data: {
-        label: `Option ${outcomeIndex}`,
-        description: '',
-        probabilityPct: defaultProb,
-        cost: 25000 * outcomeIndex,
-      },
+    const position = {
+      x: qNode.position.x + 310,
+      y: qNode.position.y + (outcomeIndex - 1) * 110 - 30,
     };
+
+    const newOutcome: AnyOutcomeFlowNode = advanced
+      ? {
+          id: outcomeId,
+          type: 'advanced-outcome',
+          position,
+          data: {
+            label: `Advanced Option ${outcomeIndex}`,
+            description: '',
+            probabilityPct: defaultProb,
+            cost: 50000,
+            pots: createDefaultPots(),
+            capexOpexEnabled: false,
+            opexAnnualCost: 8000,
+            opexInflationPct: 3.5,
+            opexPotId: 'external',
+          },
+        }
+      : {
+          id: outcomeId,
+          type: 'outcome',
+          position,
+          data: {
+            label: `Option ${outcomeIndex}`,
+            description: '',
+            probabilityPct: defaultProb,
+            cost: 25000 * outcomeIndex,
+          },
+        };
 
     const nextNodes: ModelNode[] = [...nodes, newOutcome];
     const newEdge: ModelEdge = decorateEdge(
@@ -1003,13 +1135,131 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
     persistDraft(modelName, currency, nextNodes, nextEdges);
   },
 
+  importCsvChain: (rows, mode) => {
+    if (rows.length === 0) return;
+    const { nodes, edges, modelName, currency, layoutAlgorithm, outcomeDisplayMode, layoutVersion } =
+      get();
+
+    if (mode === 'replace') {
+      const built = buildCsvChainGraph(rows, { includeTerminals: true });
+      const nextNodes = built.nodes;
+      const nextEdges = hydrateEdges(nextNodes, built.edges as ModelEdge[]);
+      const laidOut = computeAutoLayout(
+        nextNodes,
+        nextEdges,
+        layoutAlgorithm,
+        outcomeDisplayMode
+      );
+      const validation = validateModel(laidOut, nextEdges);
+      const name = modelName || 'Imported Risk Chain';
+      set({
+        nodes: laidOut,
+        edges: nextEdges,
+        validation,
+        selectedNodeId: laidOut.find((n) => n.type === 'question')?.id ?? null,
+        selectedEdgeId: null,
+        connectionError: null,
+        layoutVersion: layoutVersion + 1,
+        simulationResult: validation.valid
+          ? runMonteCarloSimulation(laidOut, nextEdges, get().trials, currency)
+          : null,
+      });
+      persistDraft(name, currency, laidOut, nextEdges);
+      return;
+    }
+
+    const maxX = nodes.reduce((acc, n) => Math.max(acc, n.position.x), 0);
+    const built = buildCsvChainGraph(rows, {
+      includeTerminals: false,
+      origin: { x: maxX + 80, y: 80 },
+    });
+
+    const existingStart = nodes.find((n) => n.type === 'start');
+    const existingEnd = nodes.find((n) => n.type === 'end');
+    let fragmentNodes = built.nodes;
+    const fragmentEdges = [...built.edges];
+
+    const firstQuestion = fragmentNodes.find((n) => n.type === 'question');
+    const lastQuestion = [...fragmentNodes]
+      .reverse()
+      .find((n) => n.type === 'question');
+
+    if (existingStart && firstQuestion) {
+      fragmentEdges.push({
+        id: `e-${existingStart.id}-${firstQuestion.id}`,
+        source: existingStart.id,
+        target: firstQuestion.id,
+        data: { kind: 'start-to-question' },
+      });
+    }
+
+    if (lastQuestion) {
+      if (existingEnd) {
+        fragmentEdges.push({
+          id: `e-${lastQuestion.id}-${existingEnd.id}`,
+          source: lastQuestion.id,
+          target: existingEnd.id,
+          data: { kind: 'question-to-end' },
+        });
+      } else {
+        const endId = `end-csv-${Date.now().toString(36)}`;
+        fragmentNodes = [
+          ...fragmentNodes,
+          {
+            id: endId,
+            type: 'end',
+            position: {
+              x: lastQuestion.position.x + 420,
+              y: lastQuestion.position.y + 50,
+            },
+            data: { label: 'Project Complete' },
+          },
+        ];
+        fragmentEdges.push({
+          id: `e-${lastQuestion.id}-${endId}`,
+          source: lastQuestion.id,
+          target: endId,
+          data: { kind: 'question-to-end' },
+        });
+      }
+    }
+
+    const nextNodes = [
+      ...nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
+      ...fragmentNodes,
+    ];
+    const nextEdges = hydrateEdges(nextNodes, [
+      ...edges,
+      ...(fragmentEdges as ModelEdge[]),
+    ]);
+    const laidOut = computeAutoLayout(
+      nextNodes,
+      nextEdges,
+      layoutAlgorithm,
+      outcomeDisplayMode
+    );
+    const validation = validateModel(laidOut, nextEdges);
+    set({
+      nodes: laidOut,
+      edges: nextEdges,
+      validation,
+      selectedNodeId: firstQuestion?.id ?? null,
+      selectedEdgeId: null,
+      connectionError: null,
+      layoutVersion: layoutVersion + 1,
+    });
+    persistDraft(modelName, currency, laidOut, nextEdges);
+  },
+
   splitQuestionProbabilitiesEvenly: (questionId) => {
     const { nodes, edges, modelName, currency } = get();
     const outcomeIds = edges
-      .filter((e) => e.source === questionId)
+      .filter(
+        (e) => e.source === questionId && e.data?.kind === 'question-to-outcome'
+      )
       .map((e) => e.target)
       .filter((targetId) =>
-        nodes.some((n) => n.id === targetId && n.type === 'outcome')
+        nodes.some((n) => n.id === targetId && isOutcomeNodeType(n.type))
       );
 
     const count = outcomeIds.length;
@@ -1020,7 +1270,7 @@ export const useModelStore = create<ModelStoreState>((set, get) => ({
 
     const nextNodes = nodes.map((n) => {
       const idx = outcomeIds.indexOf(n.id);
-      if (idx === -1 || n.type !== 'outcome') return n;
+      if (idx === -1 || !isOutcomeNodeType(n.type)) return n;
       const prob =
         idx === count - 1
           ? Math.round((100 - allocated) * 100) / 100

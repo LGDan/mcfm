@@ -4,6 +4,7 @@ import {
   mdiContentCopy,
   mdiContentCut,
   mdiContentDuplicate,
+  mdiLayersTripleOutline,
   mdiPlus,
   mdiScaleBalance,
   mdiTrashCanOutline,
@@ -13,9 +14,18 @@ import { useModelStore } from '../store/modelStore';
 import {
   formatCurrency,
   getCurrencySymbol,
+  isOutcomeNodeType,
+  type AdvancedOutcomeFlowNode,
+  type AnyOutcomeFlowNode,
+  type CostPotAllocation,
+  type EstimateMode,
+  type NoteFlowNode,
   type OutcomeFlowNode,
   type QuestionFlowNode,
+  type VariableFlowNode,
+  type VariableMode,
 } from '../types/model';
+import { computeNominalAdvancedOutcomeCost } from '../sim/formulaEvaluator';
 import { MdiIcon } from './MdiIcon';
 
 export function PropertiesPanel() {
@@ -208,7 +218,9 @@ export function PropertiesPanel() {
                       ? 'Conditional Follow-up (Outcome → Question)'
                       : kind === 'start-to-question'
                         ? 'Entry Link (Start → Question)'
-                        : 'Terminal Link (Outcome → End)'}
+                        : kind === 'note-link'
+                          ? 'Note Annotation (closest-point dashed)'
+                          : 'Terminal Link (Outcome → End)'}
             </div>
           </div>
 
@@ -247,8 +259,10 @@ export function PropertiesPanel() {
       (e) => e.source === qNode.id && e.data?.kind === 'question-to-outcome'
     );
     const childOutcomes = childOutcomeEdges
-      .map((e) => nodes.find((n) => n.id === e.target && n.type === 'outcome'))
-      .filter((n): n is OutcomeFlowNode => Boolean(n));
+      .map((e) =>
+        nodes.find((n) => n.id === e.target && isOutcomeNodeType(n.type))
+      )
+      .filter((n): n is AnyOutcomeFlowNode => Boolean(n));
 
     const andQuestionEdges = edges.filter(
       (e) => e.source === qNode.id && e.data?.kind === 'question-to-question'
@@ -302,6 +316,43 @@ export function PropertiesPanel() {
                 updateNodeData(qNode.id, { description: e.target.value })
               }
             />
+          </div>
+
+          <div className="prop-field">
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={Boolean(qNode.data.impactYearEnabled)}
+                onChange={(e) =>
+                  updateNodeData(qNode.id, {
+                    impactYearEnabled: e.target.checked,
+                    impactYear: qNode.data.impactYear ?? 1,
+                  })
+                }
+              />
+              <span>Enable Impact Year</span>
+            </label>
+            {qNode.data.impactYearEnabled && (
+              <select
+                value={qNode.data.impactYear ?? 1}
+                onChange={(e) =>
+                  updateNodeData(qNode.id, {
+                    impactYear: Number(e.target.value),
+                  })
+                }
+                aria-label="Impact year"
+              >
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((y) => (
+                  <option key={y} value={y}>
+                    Year {y}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="sidebar-hint">
+              When enabled, Capex from this question lands in the selected year
+              and Opex compounds across the 5-year rolling horizon.
+            </p>
           </div>
         </div>
 
@@ -378,18 +429,28 @@ export function PropertiesPanel() {
                     />
                   </div>
                   <div>
-                    <label>Cost ({currencySymbol})</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1000}
-                      value={o.data.cost}
-                      onChange={(e) =>
-                        updateNodeData(o.id, {
-                          cost: Math.max(0, Number(e.target.value)),
-                        })
-                      }
-                    />
+                    <label>
+                      {o.type === 'advanced-outcome'
+                        ? 'Est. Cost'
+                        : `Cost (${currencySymbol})`}
+                    </label>
+                    {o.type === 'advanced-outcome' ? (
+                      <div className="prop-readonly-box">
+                        {formatCurrency(Number(o.data.cost) || 0, currency)}
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        step={1000}
+                        value={o.data.cost}
+                        onChange={(e) =>
+                          updateNodeData(o.id, {
+                            cost: Math.max(0, Number(e.target.value)),
+                          })
+                        }
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -415,10 +476,18 @@ export function PropertiesPanel() {
             <button
               type="button"
               className="btn btn-secondary btn-full btn-with-icon"
-              onClick={() => addOutcomeForQuestion(qNode.id)}
+              onClick={() => addOutcomeForQuestion(qNode.id, false)}
             >
               <MdiIcon path={mdiPlus} size={14} />
               <span>Add Outcome Branch</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-full btn-with-icon"
+              onClick={() => addOutcomeForQuestion(qNode.id, true)}
+            >
+              <MdiIcon path={mdiLayersTripleOutline} size={14} />
+              <span>Add Advanced Outcome</span>
             </button>
             {childOutcomes.length > 0 && (
               <button
@@ -453,6 +522,548 @@ export function PropertiesPanel() {
             </div>
           </div>
         )}
+      </aside>
+    );
+  }
+
+  if (selectedNode.type === 'advanced-outcome') {
+    const oNode = selectedNode as AdvancedOutcomeFlowNode;
+    const parentEdge = edges.find(
+      (e) => e.target === oNode.id && e.data?.kind === 'question-to-outcome'
+    );
+    const parentQuestion = parentEdge
+      ? (nodes.find((n) => n.id === parentEdge.source) as
+          | QuestionFlowNode
+          | undefined)
+      : undefined;
+    const parentProbSum = parentQuestion
+      ? validation.questionProbSums[parentQuestion.id] ?? 0
+      : null;
+    const pots = oNode.data.pots ?? [];
+    const varMap: Record<string, number> = {};
+    for (const n of nodes) {
+      if (n.type === 'variable') {
+        const vn = n as VariableFlowNode;
+        varMap[vn.data.name] =
+          vn.data.mode === 'fixed'
+            ? vn.data.fixedValue
+            : vn.data.mode === 'slider'
+              ? vn.data.sliderValue
+              : (vn.data.minValue + vn.data.maxValue) / 2;
+      }
+    }
+    const nominal = computeNominalAdvancedOutcomeCost(
+      pots,
+      varMap,
+      oNode.data.capexOpexEnabled,
+      oNode.data.opexAnnualCost,
+      oNode.data.opexInflationPct
+    );
+
+    const updatePots = (nextPots: CostPotAllocation[]) => {
+      updateNodeData(oNode.id, {
+        pots: nextPots,
+        cost: nextPots.reduce((acc, p) => {
+          if (p.estimateMode === 'fixed') return acc + (Number(p.fixedCost) || 0);
+          if (p.estimateMode === 'three-point') {
+            return (
+              acc +
+              Math.round(
+                ((Number(p.lowCost) || 0) +
+                  (Number(p.mediumCost) || 0) +
+                  (Number(p.highCost) || 0)) /
+                  3
+              )
+            );
+          }
+          return acc;
+        }, 0),
+      });
+    };
+
+    const updatePot = (potId: string, patch: Partial<CostPotAllocation>) => {
+      updatePots(
+        pots.map((p) => (p.potId === potId ? { ...p, ...patch } : p))
+      );
+    };
+
+    return (
+      <aside className="properties-sidebar">
+        <div className="sidebar-section">
+          <div className="prop-header-row">
+            <span className="flow-node-badge badge-advanced-outcome">
+              ADVANCED OUTCOME
+            </span>
+            <div className="prop-header-actions">
+              <button
+                type="button"
+                className="btn-icon-danger"
+                onClick={() => deleteNodeById(oNode.id)}
+              >
+                <MdiIcon path={mdiTrashCanOutline} size={13} />
+                <span>Delete</span>
+              </button>
+              {collapseBtn}
+            </div>
+          </div>
+
+          {parentQuestion && (
+            <div className="prop-field">
+              <label>Parent Question</label>
+              <button
+                type="button"
+                className="linked-q-chip"
+                onClick={() => selectNode(parentQuestion.id)}
+              >
+                ← {parentQuestion.data.label} (Σ {parentProbSum}%)
+              </button>
+            </div>
+          )}
+
+          <div className="prop-field">
+            <label htmlFor="ao-label">Outcome Name</label>
+            <input
+              id="ao-label"
+              type="text"
+              value={oNode.data.label}
+              onChange={(e) =>
+                updateNodeData(oNode.id, { label: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="prop-field">
+            <label htmlFor="ao-desc">Description</label>
+            <textarea
+              id="ao-desc"
+              rows={2}
+              value={oNode.data.description || ''}
+              onChange={(e) =>
+                updateNodeData(oNode.id, { description: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="prop-field">
+            <label>
+              Branch Probability (%) — {oNode.data.probabilityPct}%
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={oNode.data.probabilityPct}
+              onChange={(e) =>
+                updateNodeData(oNode.id, {
+                  probabilityPct: Math.max(
+                    0,
+                    Math.min(100, Number(e.target.value))
+                  ),
+                })
+              }
+            />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={oNode.data.probabilityPct}
+              onChange={(e) =>
+                rebalanceOutcomeProbability(oNode.id, Number(e.target.value))
+              }
+            />
+          </div>
+
+          <div className="prop-readonly-box">
+            Nominal {oNode.data.capexOpexEnabled ? 'Capex + 5yr Opex' : 'Capex'}:{' '}
+            <strong>
+              {formatCurrency(
+                oNode.data.capexOpexEnabled
+                  ? nominal.totalNominal
+                  : nominal.capexNominal,
+                currency
+              )}
+            </strong>
+          </div>
+        </div>
+
+        <div className="sidebar-section">
+          <div className="prop-header-row">
+            <h3 className="sidebar-subheading">Cost Pots</h3>
+          </div>
+          {pots.map((pot) => (
+            <div key={pot.potId} className="pot-editor-card">
+              <div className="outcome-inline-top">
+                <input
+                  type="text"
+                  value={pot.label}
+                  onChange={(e) => updatePot(pot.potId, { label: e.target.value })}
+                  aria-label="Pot label"
+                />
+                {pots.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn-icon-danger"
+                    onClick={() =>
+                      updatePots(pots.filter((p) => p.potId !== pot.potId))
+                    }
+                    title="Remove pot"
+                  >
+                    <MdiIcon path={mdiTrashCanOutline} size={12} />
+                  </button>
+                )}
+              </div>
+              <label className="prop-field">
+                <span>Estimate Mode</span>
+                <select
+                  value={pot.estimateMode}
+                  onChange={(e) =>
+                    updatePot(pot.potId, {
+                      estimateMode: e.target.value as EstimateMode,
+                    })
+                  }
+                >
+                  <option value="fixed">Fixed</option>
+                  <option value="three-point">Low / Medium / High</option>
+                  <option value="formula">Formula</option>
+                </select>
+              </label>
+              {pot.estimateMode === 'fixed' && (
+                <label className="prop-field">
+                  <span>Fixed Cost ({currencySymbol})</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={pot.fixedCost}
+                    onChange={(e) =>
+                      updatePot(pot.potId, {
+                        fixedCost: Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                  />
+                </label>
+              )}
+              {pot.estimateMode === 'three-point' && (
+                <div className="outcome-inline-grid pot-lmh-grid">
+                  {(['lowCost', 'mediumCost', 'highCost'] as const).map(
+                    (key) => (
+                      <label key={key} className="prop-field">
+                        <span>
+                          {key === 'lowCost'
+                            ? 'Low'
+                            : key === 'mediumCost'
+                              ? 'Med'
+                              : 'High'}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1000}
+                          value={pot[key]}
+                          onChange={(e) =>
+                            updatePot(pot.potId, {
+                              [key]: Math.max(0, Number(e.target.value) || 0),
+                            })
+                          }
+                        />
+                      </label>
+                    )
+                  )}
+                </div>
+              )}
+              {pot.estimateMode === 'formula' && (
+                <label className="prop-field">
+                  <span>Formula (e.g. day_rate * 20)</span>
+                  <input
+                    type="text"
+                    className="formula-input"
+                    value={pot.formula}
+                    onChange={(e) =>
+                      updatePot(pot.potId, { formula: e.target.value })
+                    }
+                    placeholder="variable_a * 10"
+                  />
+                </label>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn btn-ghost btn-full btn-with-icon"
+            onClick={() => {
+              const idx = pots.length + 1;
+              updatePots([
+                ...pots,
+                {
+                  potId: `custom-${Date.now().toString(36)}`,
+                  label: `Custom Pot ${idx}`,
+                  estimateMode: 'fixed',
+                  fixedCost: 0,
+                  lowCost: 0,
+                  mediumCost: 0,
+                  highCost: 0,
+                  formula: '0',
+                },
+              ]);
+            }}
+          >
+            <MdiIcon path={mdiPlus} size={14} />
+            <span>Add Custom Pot</span>
+          </button>
+        </div>
+
+        <div className="sidebar-section">
+          <h3 className="sidebar-subheading">Capex &amp; Opex</h3>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={Boolean(oNode.data.capexOpexEnabled)}
+              onChange={(e) =>
+                updateNodeData(oNode.id, {
+                  capexOpexEnabled: e.target.checked,
+                })
+              }
+            />
+            <span>Enable ongoing Opex (5-year rolling horizon)</span>
+          </label>
+          {oNode.data.capexOpexEnabled && (
+            <>
+              <div className="prop-field">
+                <label>Annual Opex ({currencySymbol})</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={500}
+                  value={oNode.data.opexAnnualCost ?? 0}
+                  onChange={(e) =>
+                    updateNodeData(oNode.id, {
+                      opexAnnualCost: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                />
+              </div>
+              <div className="prop-field">
+                <label>Inflation (% / year)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={oNode.data.opexInflationPct ?? 3.5}
+                  onChange={(e) =>
+                    updateNodeData(oNode.id, {
+                      opexInflationPct: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                />
+              </div>
+              <div className="prop-field">
+                <label>Opex Cost Pot</label>
+                <select
+                  value={oNode.data.opexPotId ?? 'external'}
+                  onChange={(e) =>
+                    updateNodeData(oNode.id, { opexPotId: e.target.value })
+                  }
+                >
+                  {pots.map((p) => (
+                    <option key={p.potId} value={p.potId}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="sidebar-hint">
+                Primary pot costs are treated as Capex in the Question Impact
+                Year. Opex compounds annually for 5 years from that year.
+              </p>
+            </>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
+  if (selectedNode.type === 'variable') {
+    const vNode = selectedNode as VariableFlowNode;
+    return (
+      <aside className="properties-sidebar">
+        <div className="sidebar-section">
+          <div className="prop-header-row">
+            <span className="flow-node-badge badge-variable">VARIABLE</span>
+            <div className="prop-header-actions">
+              <button
+                type="button"
+                className="btn-icon-danger"
+                onClick={() => deleteNodeById(vNode.id)}
+              >
+                <MdiIcon path={mdiTrashCanOutline} size={13} />
+                <span>Delete</span>
+              </button>
+              {collapseBtn}
+            </div>
+          </div>
+
+          <div className="prop-field">
+            <label htmlFor="var-label">Display Label</label>
+            <input
+              id="var-label"
+              type="text"
+              value={vNode.data.label}
+              onChange={(e) =>
+                updateNodeData(vNode.id, { label: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="prop-field">
+            <label htmlFor="var-name">Identifier (used in formulas)</label>
+            <input
+              id="var-name"
+              type="text"
+              className="formula-input"
+              value={vNode.data.name}
+              onChange={(e) =>
+                updateNodeData(vNode.id, { name: e.target.value })
+              }
+            />
+            <p className="sidebar-hint">
+              Sanitized to <code>[a-z_][a-z0-9_]*</code>. Reference this name
+              in Advanced Outcome formulas.
+            </p>
+          </div>
+
+          <div className="prop-field">
+            <label>Mode</label>
+            <div className="variable-mode-tabs">
+              {(['fixed', 'slider', 'random'] as VariableMode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`var-mode-btn ${
+                    vNode.data.mode === m ? 'is-active' : ''
+                  }`}
+                  onClick={() => updateNodeData(vNode.id, { mode: m })}
+                >
+                  {m === 'fixed' ? 'Fixed' : m === 'slider' ? 'Slider' : 'Random'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {vNode.data.mode === 'fixed' && (
+            <div className="prop-field">
+              <label>Fixed Value</label>
+              <input
+                type="number"
+                value={vNode.data.fixedValue}
+                onChange={(e) =>
+                  updateNodeData(vNode.id, {
+                    fixedValue: Number(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+          )}
+
+          {(vNode.data.mode === 'slider' || vNode.data.mode === 'random') && (
+            <>
+              <div className="outcome-inline-grid">
+                <div className="prop-field">
+                  <label>Minimum</label>
+                  <input
+                    type="number"
+                    value={vNode.data.minValue}
+                    onChange={(e) =>
+                      updateNodeData(vNode.id, {
+                        minValue: Number(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div className="prop-field">
+                  <label>Maximum</label>
+                  <input
+                    type="number"
+                    value={vNode.data.maxValue}
+                    onChange={(e) =>
+                      updateNodeData(vNode.id, {
+                        maxValue: Number(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              {vNode.data.mode === 'slider' && (
+                <div className="prop-field">
+                  <label>Slider Value ({vNode.data.sliderValue})</label>
+                  <input
+                    type="range"
+                    min={vNode.data.minValue}
+                    max={Math.max(vNode.data.minValue + 1, vNode.data.maxValue)}
+                    step={1}
+                    value={vNode.data.sliderValue}
+                    onChange={(e) =>
+                      updateNodeData(vNode.id, {
+                        sliderValue: Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
+  if (selectedNode.type === 'note') {
+    const nNode = selectedNode as NoteFlowNode;
+    return (
+      <aside className="properties-sidebar">
+        <div className="sidebar-section">
+          <div className="prop-header-row">
+            <span className="flow-node-badge badge-note">NOTE</span>
+            <div className="prop-header-actions">
+              <button
+                type="button"
+                className="btn-icon-danger"
+                onClick={() => deleteNodeById(nNode.id)}
+              >
+                <MdiIcon path={mdiTrashCanOutline} size={13} />
+                <span>Delete</span>
+              </button>
+              {collapseBtn}
+            </div>
+          </div>
+          <p className="sidebar-hint">
+            Notes are editorial only. Connect them to any node with a dashed
+            closest-point link — they are ignored by validation and simulation.
+          </p>
+          <div className="prop-field">
+            <label htmlFor="note-label">Title</label>
+            <input
+              id="note-label"
+              type="text"
+              value={nNode.data.label}
+              onChange={(e) =>
+                updateNodeData(nNode.id, { label: e.target.value })
+              }
+            />
+          </div>
+          <div className="prop-field">
+            <label htmlFor="note-desc">Annotation</label>
+            <textarea
+              id="note-desc"
+              rows={6}
+              value={nNode.data.description}
+              onChange={(e) =>
+                updateNodeData(nNode.id, { description: e.target.value })
+              }
+            />
+          </div>
+        </div>
       </aside>
     );
   }

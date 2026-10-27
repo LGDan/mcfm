@@ -1,9 +1,11 @@
 import {
   formatCurrency,
+  isOutcomeNodeType,
+  type AnyOutcomeFlowNode,
   type CurrencyCode,
   type ModelEdge,
   type ModelNode,
-  type OutcomeFlowNode,
+  type PathTrace,
   type QuestionFlowNode,
   type SimulationResult,
 } from '../types/model';
@@ -157,8 +159,11 @@ export function generateHtmlReport(ctx: ReportContext): string {
         (e) => e.source === q.id && e.data?.kind === 'question-to-outcome'
       );
       const outcomes = outcomeEdges
-        .map((e) => nodeMap.get(e.target) as OutcomeFlowNode | undefined)
-        .filter((o): o is OutcomeFlowNode => Boolean(o));
+        .map((e) => nodeMap.get(e.target))
+        .filter(
+          (o): o is AnyOutcomeFlowNode =>
+            o != null && isOutcomeNodeType(o.type)
+        );
 
       const aggregateTargets = edges
         .filter(
@@ -180,7 +185,9 @@ export function generateHtmlReport(ctx: ReportContext): string {
               : aggregateTargets.length > 0
                 ? `→ (Aggregate) ${aggregateTargets.join(', ')}`
                 : '→ Terminal';
-          return `<li><strong>${escapeHtml(o.data.label)}</strong> (${o.data.probabilityPct}% · +${escapeHtml(formatCurrency(o.data.cost, currency))}) <span class="routing">${escapeHtml(nextRouting)}</span>${o.data.description ? `<div class="desc">${escapeHtml(o.data.description)}</div>` : ''}</li>`;
+          const costLabel =
+            o.type === 'advanced-outcome' ? 'adv. est. ' : '+';
+          return `<li><strong>${escapeHtml(o.data.label)}</strong> (${o.data.probabilityPct}% · ${costLabel}${escapeHtml(formatCurrency(o.data.cost, currency))}${o.type === 'advanced-outcome' ? ' · advanced' : ''}) <span class="routing">${escapeHtml(nextRouting)}</span>${o.data.description ? `<div class="desc">${escapeHtml(o.data.description)}</div>` : ''}</li>`;
         })
         .join('');
 
@@ -192,6 +199,87 @@ export function generateHtmlReport(ctx: ReportContext): string {
         </div>`;
     })
     .join('');
+
+  const pathHtml = (title: string, path: PathTrace) => `
+      <div class="path-block">
+        <div class="q-title">${escapeHtml(title)} — ${escapeHtml(formatCurrency(path.totalCost, currency))}</div>
+        <div class="desc">Capex ${escapeHtml(formatCurrency(path.capexTotal, currency))} · Opex ${escapeHtml(formatCurrency(path.opexTotal, currency))}</div>
+        <ol class="q-outcomes">
+          ${path.steps
+            .map(
+              (s) =>
+                `<li><strong>${escapeHtml(s.questionLabel)}</strong> → ${escapeHtml(s.outcomeLabel)} (${s.probabilityPct}%, Year ${s.impactYear}) · ${escapeHtml(formatCurrency(s.cost, currency))}</li>`
+            )
+            .join('')}
+        </ol>
+      </div>`;
+
+  const potRows = result.potBreakdowns
+    .map(
+      (p) => `
+      <tr>
+        <td><strong>${escapeHtml(p.label)}</strong></td>
+        <td class="num">${escapeHtml(formatCurrency(p.mean, currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(p.p50, currency))}</td>
+        <td class="num expected">${escapeHtml(formatCurrency(p.p80, currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(p.p90, currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(p.min, currency))} – ${escapeHtml(formatCurrency(p.max, currency))}</td>
+      </tr>`
+    )
+    .join('');
+
+  const yearRows = result.yearBreakdowns
+    .map(
+      (y) => `
+      <tr>
+        <td>Year ${y.year}</td>
+        <td class="num">${escapeHtml(formatCurrency(y.expectedCapex, currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(y.expectedOpex, currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(y.mean, currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(y.p50, currency))}</td>
+        <td class="num expected">${escapeHtml(formatCurrency(y.p80, currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(y.p90, currency))}</td>
+      </tr>`
+    )
+    .join('');
+
+  const extraSections = `
+    <h2>Minimum &amp; Maximum Spend Pathways</h2>
+    <div class="q-grid">
+      ${pathHtml('Minimum Spend Path', result.minPath)}
+      ${pathHtml('Maximum Spend Path', result.maxPath)}
+    </div>
+    ${
+      result.hasAdvancedOutcomes && potRows
+        ? `<h2>Cost Pot Accumulators</h2>
+    <table>
+      <thead><tr><th>Pot</th><th>Mean</th><th>P50</th><th>P80</th><th>P90</th><th>Min – Max</th></tr></thead>
+      <tbody>${potRows}</tbody>
+    </table>`
+        : ''
+    }
+    ${
+      result.capexOpex.enabled
+        ? `<h2>Capex &amp; Opex Summary</h2>
+    <table>
+      <thead><tr><th>Category</th><th>Mean</th><th>P50</th><th>P80</th></tr></thead>
+      <tbody>
+        <tr><td>Capex</td><td class="num">${escapeHtml(formatCurrency(result.capexOpex.capexMean, currency))}</td><td class="num">${escapeHtml(formatCurrency(result.capexOpex.capexP50, currency))}</td><td class="num expected">${escapeHtml(formatCurrency(result.capexOpex.capexP80, currency))}</td></tr>
+        <tr><td>Opex (5-year horizon)</td><td class="num">${escapeHtml(formatCurrency(result.capexOpex.opexMean, currency))}</td><td class="num">${escapeHtml(formatCurrency(result.capexOpex.opexP50, currency))}</td><td class="num expected">${escapeHtml(formatCurrency(result.capexOpex.opexP80, currency))}</td></tr>
+      </tbody>
+    </table>`
+        : ''
+    }
+    ${
+      result.impactYearsEnabled && yearRows
+        ? `<h2>Multi-Year Budget Phasing</h2>
+    <table>
+      <thead><tr><th>Year</th><th>Expected Capex</th><th>Expected Opex</th><th>Mean</th><th>P50</th><th>P80</th><th>P90</th></tr></thead>
+      <tbody>${yearRows}</tbody>
+    </table>`
+        : ''
+    }
+  `;
 
   const driverRows = result.outcomeDrivers
     .map(
@@ -438,6 +526,8 @@ export function generateHtmlReport(ctx: ReportContext): string {
       ${renderHistogramSvg(result, currency)}
     </div>
 
+    ${extraSections}
+
     <h2>Cost Drivers &amp; Pathway Sensitivity</h2>
     <table>
       <thead>
@@ -491,11 +581,69 @@ export function generateMarkdownReport(ctx: ReportContext): string {
     `| P95 (Extreme Tail) | ${formatCurrency(result.p95, currency)} |`,
     `| Min – Max Observed | ${formatCurrency(result.min, currency)} – ${formatCurrency(result.max, currency)} |`,
     ``,
+    `## Minimum & Maximum Spend Pathways`,
+    ``,
+    `### Minimum Spend Path — ${formatCurrency(result.minPath.totalCost, currency)}`,
+    ``,
+    ...result.minPath.steps.map(
+      (s) =>
+        `- **${s.questionLabel}** → ${s.outcomeLabel} (${s.probabilityPct}%, Year ${s.impactYear}) · ${formatCurrency(s.cost, currency)}`
+    ),
+    ``,
+    `### Maximum Spend Path — ${formatCurrency(result.maxPath.totalCost, currency)}`,
+    ``,
+    ...result.maxPath.steps.map(
+      (s) =>
+        `- **${s.questionLabel}** → ${s.outcomeLabel} (${s.probabilityPct}%, Year ${s.impactYear}) · ${formatCurrency(s.cost, currency)}`
+    ),
+    ``,
+  ];
+
+  if (result.hasAdvancedOutcomes && result.potBreakdowns.length > 0) {
+    lines.push(`## Cost Pot Accumulators`, ``);
+    lines.push(`| Pot | Mean | P50 | P80 | P90 | Min | Max |`);
+    lines.push(`| :--- | ---: | ---: | ---: | ---: | ---: | ---: |`);
+    for (const p of result.potBreakdowns) {
+      lines.push(
+        `| ${p.label} | ${formatCurrency(p.mean, currency)} | ${formatCurrency(p.p50, currency)} | ${formatCurrency(p.p80, currency)} | ${formatCurrency(p.p90, currency)} | ${formatCurrency(p.min, currency)} | ${formatCurrency(p.max, currency)} |`
+      );
+    }
+    lines.push(``);
+  }
+
+  if (result.capexOpex.enabled) {
+    lines.push(
+      `## Capex & Opex`,
+      ``,
+      `| Category | Mean | P50 | P80 |`,
+      `| :--- | ---: | ---: | ---: |`,
+      `| Capex | ${formatCurrency(result.capexOpex.capexMean, currency)} | ${formatCurrency(result.capexOpex.capexP50, currency)} | ${formatCurrency(result.capexOpex.capexP80, currency)} |`,
+      `| Opex | ${formatCurrency(result.capexOpex.opexMean, currency)} | ${formatCurrency(result.capexOpex.opexP50, currency)} | ${formatCurrency(result.capexOpex.opexP80, currency)} |`,
+      ``
+    );
+  }
+
+  if (result.impactYearsEnabled && result.yearBreakdowns.length > 0) {
+    lines.push(
+      `## Multi-Year Budget Phasing`,
+      ``,
+      `| Year | Expected Capex | Expected Opex | Mean | P50 | P80 | P90 |`,
+      `| :--- | ---: | ---: | ---: | ---: | ---: | ---: |`
+    );
+    for (const y of result.yearBreakdowns) {
+      lines.push(
+        `| Year ${y.year} | ${formatCurrency(y.expectedCapex, currency)} | ${formatCurrency(y.expectedOpex, currency)} | ${formatCurrency(y.mean, currency)} | ${formatCurrency(y.p50, currency)} | ${formatCurrency(y.p80, currency)} | ${formatCurrency(y.p90, currency)} |`
+      );
+    }
+    lines.push(``);
+  }
+
+  lines.push(
     `## Cost Drivers & Pathway Sensitivity`,
     ``,
     `| Question | Outcome Branch | Description | Branch Prob | Pathway Cost | Sim Trigger Rate | Expected Cost Contribution |`,
-    `| :--- | :--- | :--- | ---: | ---: | ---: | ---: |`,
-  ];
+    `| :--- | :--- | :--- | ---: | ---: | ---: | ---: |`
+  );
 
   for (const d of result.outcomeDrivers) {
     lines.push(
@@ -528,10 +676,11 @@ export function generateMarkdownReport(ctx: ReportContext): string {
       (e) => e.source === q.id && e.data?.kind === 'question-to-outcome'
     );
     for (const oe of outcomeEdges) {
-      const o = nodeMap.get(oe.target) as OutcomeFlowNode | undefined;
-      if (!o) continue;
+      const o = nodeMap.get(oe.target);
+      if (!o || !isOutcomeNodeType(o.type)) continue;
+      const outcome = o as AnyOutcomeFlowNode;
       lines.push(
-        `- **${o.data.label}** (${o.data.probabilityPct}%, +${formatCurrency(o.data.cost, currency)})${o.data.description ? ` — _${o.data.description}_` : ''}`
+        `- **${outcome.data.label}** (${outcome.data.probabilityPct}%, +${formatCurrency(outcome.data.cost, currency)}${outcome.type === 'advanced-outcome' ? ', advanced' : ''})${outcome.data.description ? ` — _${outcome.data.description}_` : ''}`
       );
     }
     lines.push(``);
@@ -566,6 +715,8 @@ export function generateCsvReport(ctx: ReportContext): string {
     ['Extreme Tail (P95)', Math.round(result.p95)],
     ['Minimum Observed', Math.round(result.min)],
     ['Maximum Observed', Math.round(result.max)],
+    ['Min Path Total', Math.round(result.minPath.totalCost)],
+    ['Max Path Total', Math.round(result.maxPath.totalCost)],
     [],
     [
       'COST DRIVERS',
@@ -613,6 +764,75 @@ export function generateCsvReport(ctx: ReportContext): string {
       Number(b.cumulativePct.toFixed(2)),
       b.containsP80 ? 'YES' : 'NO',
     ]);
+  }
+
+  if (result.potBreakdowns.length > 0) {
+    rows.push([]);
+    rows.push(['COST POTS', 'MEAN', 'P50', 'P80', 'P90', 'MIN', 'MAX']);
+    for (const p of result.potBreakdowns) {
+      rows.push([
+        p.label,
+        Math.round(p.mean),
+        Math.round(p.p50),
+        Math.round(p.p80),
+        Math.round(p.p90),
+        Math.round(p.min),
+        Math.round(p.max),
+      ]);
+    }
+  }
+
+  if (result.yearBreakdowns.length > 0) {
+    rows.push([]);
+    rows.push([
+      'YEAR',
+      'EXPECTED CAPEX',
+      'EXPECTED OPEX',
+      'MEAN',
+      'P50',
+      'P80',
+      'P90',
+    ]);
+    for (const y of result.yearBreakdowns) {
+      rows.push([
+        y.year,
+        Math.round(y.expectedCapex),
+        Math.round(y.expectedOpex),
+        Math.round(y.mean),
+        Math.round(y.p50),
+        Math.round(y.p80),
+        Math.round(y.p90),
+      ]);
+    }
+  }
+
+  if (result.minPath.steps.length > 0) {
+    rows.push([]);
+    rows.push(['MIN PATH STEP', 'QUESTION', 'OUTCOME', 'PROB %', 'YEAR', 'COST']);
+    result.minPath.steps.forEach((s, i) => {
+      rows.push([
+        i + 1,
+        s.questionLabel,
+        s.outcomeLabel,
+        s.probabilityPct,
+        s.impactYear,
+        Math.round(s.cost),
+      ]);
+    });
+  }
+  if (result.maxPath.steps.length > 0) {
+    rows.push([]);
+    rows.push(['MAX PATH STEP', 'QUESTION', 'OUTCOME', 'PROB %', 'YEAR', 'COST']);
+    result.maxPath.steps.forEach((s, i) => {
+      rows.push([
+        i + 1,
+        s.questionLabel,
+        s.outcomeLabel,
+        s.probabilityPct,
+        s.impactYear,
+        Math.round(s.cost),
+      ]);
+    });
   }
 
   return rows.map((r) => r.map(csvCell).join(',')).join('\n');

@@ -580,6 +580,18 @@ body,
   border-left-color: #8c8578;
 }
 
+.palette-advanced {
+  border-left-color: var(--accent-vermilion);
+}
+
+.palette-variable {
+  border-left-color: var(--accent-ochre);
+}
+
+.palette-note {
+  border-left-color: #b5a88f;
+}
+
 .palette-card-title {
   font-size: 12.5px;
   font-weight: 600;
@@ -1244,6 +1256,7 @@ body,
 .prop-field input[type='text'],
 .prop-field input[type='number'],
 .prop-field textarea,
+.prop-field select,
 .outcome-inline-card input[type='text'],
 .outcome-inline-card input[type='number'] {
   background: var(--bg-input);
@@ -1689,6 +1702,427 @@ body,
 .hit-rate-bar-fill {
   height: 100%;
   background: var(--accent-cobalt);
+}
+
+.node-badge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-footer-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-inline-btn.is-adv-btn {
+  color: var(--accent-vermilion);
+  border-color: rgba(196, 69, 40, 0.4);
+}
+
+.badge-year {
+  background: rgba(29, 92, 75, 0.1);
+  color: var(--accent-forest);
+  border-color: rgba(29, 92, 75, 0.32);
+}
+
+.badge-advanced-outcome {
+  background: rgba(196, 69, 40, 0.1);
+  color: var(--accent-vermilion);
+  border-color: rgba(196, 69, 40, 0.32);
+}
+
+.badge-variable {
+  background: rgba(166, 106, 18, 0.12);
+  color: var(--accent-ochre);
+  border-color: rgba(166, 106, 18, 0.35);
+}
+
+.badge-note {
+  background: #efe8d8;
+  color: #6a5f48;
+  border-color: #cbbfa4;
+}
+
+.flow-node-advanced-outcome {
+  border-top: 4px solid var(--accent-vermilion);
+  min-width: 240px;
+  background: var(--bg-card);
+}
+
+.flow-node-variable {
+  border-top: 4px solid var(--accent-ochre);
+  min-width: 230px;
+  background: #fffdf8;
+}
+
+.flow-node-note {
+  border-top: 4px solid #b5a88f;
+  background: #f7f1e3;
+  min-width: 190px;
+  max-width: 240px;
+  font-family: var(--font-serif);
+}
+
+.note-body-text {
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.flow-handle-note {
+  background: #b5a88f !important;
+}
+
+.variable-ident-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--bg-well);
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: var(--accent-ochre);
+}
+
+.variable-node-controls,
+.variable-mode-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.variable-mode-tabs {
+  flex-direction: row;
+}
+
+.var-mode-btn {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.var-mode-btn.is-active {
+  background: var(--accent-ink);
+  color: var(--bg-panel);
+  border-color: var(--accent-ink);
+}
+
+.var-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.var-inline-row input {
+  width: 90px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+
+.var-current-pill {
+  color: var(--accent-ochre);
+  font-weight: 600;
+}
+
+.adv-pots-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 6px 0;
+}
+
+.adv-pot-mini-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  gap: 8px;
+}
+
+.adv-pot-mini-name {
+  color: var(--text-secondary);
+}
+
+.adv-mode-chip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  margin-left: 6px;
+  padding: 0 4px;
+  background: var(--bg-well);
+  color: var(--accent-vermilion);
+}
+
+.adv-opex-mini-banner {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--accent-ochre);
+  background: rgba(166, 106, 18, 0.08);
+  border: 1px solid rgba(166, 106, 18, 0.22);
+  padding: 4px 6px;
+  margin-top: 6px;
+}
+
+.nested-outcome-card.is-advanced {
+  border-left-color: var(--accent-vermilion);
+}
+
+.nested-adv-icon {
+  margin-right: 4px;
+  color: var(--accent-vermilion);
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.formula-input {
+  font-family: var(--font-mono) !important;
+}
+
+.pot-editor-card {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.pot-lmh-grid {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.path-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.path-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  padding: 14px 16px;
+}
+
+.path-card-min {
+  border-top: 3px solid var(--accent-forest);
+}
+
+.path-card-max {
+  border-top: 3px solid var(--accent-vermilion);
+}
+
+.path-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.path-card-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.path-card-header strong {
+  font-family: var(--font-mono);
+}
+
+.path-card-meta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.path-step-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+}
+
+.path-step-list li {
+  margin-bottom: 8px;
+}
+
+.path-step-q {
+  font-weight: 600;
+}
+
+.path-step-o {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.capex-opex-kpis {
+  grid-template-columns: 1fr 1fr;
+}
+
+.year-phasing-svg {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 23, 21, 0.38);
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 18px;
+}
+
+.modal-sheet {
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border-ink);
+  box-shadow: 6px 6px 0 var(--border-ink);
+  width: min(920px, 100%);
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  padding: 22px 24px 18px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.modal-kicker {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-vermilion);
+  font-weight: 600;
+}
+
+.modal-sheet h2 {
+  margin: 2px 0 0;
+  font-family: var(--font-serif);
+  font-size: 24px;
+}
+
+.modal-lead {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+.csv-import-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.csv-source-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.csv-filename {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.csv-preview-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.csv-preview-empty,
+.csv-preview-table-wrap {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  min-height: 180px;
+}
+
+.csv-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 24px;
+}
+
+.csv-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.csv-preview-table th,
+.csv-preview-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.csv-preview-table tr.is-error td {
+  background: #fef3f2;
+}
+
+.csv-row-error {
+  color: var(--accent-danger);
+  font-size: 11px;
+}
+
+.csv-mode-fieldset {
+  border: 1px solid var(--border-subtle);
+  margin: 16px 0;
+  padding: 10px 12px;
+}
+
+.csv-mode-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.csv-mode-option em {
+  display: block;
+  font-style: normal;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 820px) {
+  .csv-import-grid,
+  .path-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .results-empty-card {

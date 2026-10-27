@@ -1,14 +1,23 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { mdiHelpRhombusOutline, mdiPlus } from '@mdi/js';
+import {
+  mdiCalendarClockOutline,
+  mdiHelpRhombusOutline,
+  mdiLayersTripleOutline,
+  mdiPlus,
+} from '@mdi/js';
 import {
   formatCurrency,
-  type OutcomeFlowNode,
+  isOutcomeNodeType,
+  type AdvancedOutcomeFlowNode,
+  type AnyOutcomeFlowNode,
   type QuestionFlowNode,
+  type VariableFlowNode,
 } from '../../types/model';
 import {
   isOutcomeOutputBlocked,
   isQuestionOutputBlocked,
 } from '../../sim/validate';
+import { computeNominalAdvancedOutcomeCost } from '../../sim/formulaEvaluator';
 import { useModelStore } from '../../store/modelStore';
 import { MdiIcon } from '../MdiIcon';
 
@@ -42,28 +51,44 @@ export function QuestionNode({
         e.data?.kind === 'question-to-end')
   );
 
-  // In Separate mode, only allow dragging from the Question handle if either
-  // question output is not blocked OR there are unparented outcome nodes on canvas to attach
   const hasUnparentedOutcomeOnCanvas =
     !isNested &&
     nodes.some(
       (n) =>
-        n.type === 'outcome' && !edges.some((e) => e.target === n.id)
+        isOutcomeNodeType(n.type) &&
+        !edges.some(
+          (e) => e.target === n.id && e.data?.kind === 'question-to-outcome'
+        )
     );
   const isQuestionHandleConnectable = isNested
     ? !questionOutputBlocked
     : !questionOutputBlocked || hasUnparentedOutcomeOnCanvas;
 
-  const childOutcomes: OutcomeFlowNode[] = isNested
+  const childOutcomes: AnyOutcomeFlowNode[] = isNested
     ? edges
         .filter(
           (e) => e.source === id && e.data?.kind === 'question-to-outcome'
         )
         .map((e) =>
-          nodes.find((n) => n.id === e.target && n.type === 'outcome')
+          nodes.find((n) => n.id === e.target && isOutcomeNodeType(n.type))
         )
-        .filter((n): n is OutcomeFlowNode => Boolean(n))
+        .filter((n): n is AnyOutcomeFlowNode => Boolean(n))
     : [];
+
+  const varMap: Record<string, number> = {};
+  if (isNested) {
+    for (const n of nodes) {
+      if (n.type === 'variable') {
+        const vn = n as VariableFlowNode;
+        varMap[vn.data.name] =
+          vn.data.mode === 'fixed'
+            ? vn.data.fixedValue
+            : vn.data.mode === 'slider'
+              ? vn.data.sliderValue
+              : (vn.data.minValue + vn.data.maxValue) / 2;
+      }
+    }
+  }
 
   return (
     <div
@@ -78,10 +103,21 @@ export function QuestionNode({
       />
 
       <div className="flow-node-header">
-        <span className="flow-node-badge badge-question">
-          <MdiIcon path={mdiHelpRhombusOutline} size={11} />
-          <span>QUESTION</span>
-        </span>
+        <div className="node-badge-group">
+          <span className="flow-node-badge badge-question">
+            <MdiIcon path={mdiHelpRhombusOutline} size={11} />
+            <span>QUESTION</span>
+          </span>
+          {data.impactYearEnabled && (
+            <span
+              className="flow-node-badge badge-year"
+              title={`Costs from this question land in Year ${data.impactYear ?? 1}`}
+            >
+              <MdiIcon path={mdiCalendarClockOutline} size={10} />
+              <span>YR {data.impactYear ?? 1}</span>
+            </span>
+          )}
+        </div>
         <span
           className={`prob-sum-pill ${isBalanced ? 'pill-ok' : 'pill-err'}`}
           title={
@@ -122,12 +158,30 @@ export function QuestionNode({
                 const isOutcomeSelected =
                   selectedNodeId === o.id || Boolean(o.selected);
                 const outcomeBlocked = isOutcomeOutputBlocked(o.id, edges);
+                const isAdv = o.type === 'advanced-outcome';
+
+                let displayCost = Number(o.data.cost) || 0;
+                if (isAdv) {
+                  const adv = o as AdvancedOutcomeFlowNode;
+                  const { totalNominal, capexNominal } =
+                    computeNominalAdvancedOutcomeCost(
+                      adv.data.pots ?? [],
+                      varMap,
+                      adv.data.capexOpexEnabled,
+                      adv.data.opexAnnualCost,
+                      adv.data.opexInflationPct
+                    );
+                  displayCost = adv.data.capexOpexEnabled
+                    ? totalNominal
+                    : capexNominal;
+                }
+
                 return (
                   <div
                     key={o.id}
                     className={`nested-outcome-card nodrag ${
                       isOutcomeSelected ? 'is-selected' : ''
-                    }`}
+                    } ${isAdv ? 'is-advanced' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       selectNode(o.id, e.shiftKey || e.metaKey || e.ctrlKey);
@@ -135,6 +189,13 @@ export function QuestionNode({
                   >
                     <div className="nested-outcome-top">
                       <span className="nested-outcome-title">
+                        {isAdv && (
+                          <MdiIcon
+                            path={mdiLayersTripleOutline}
+                            size={11}
+                            className="nested-adv-icon"
+                          />
+                        )}
                         {o.data.label || 'Outcome'}
                       </span>
                       <span className="nested-outcome-prob">
@@ -149,9 +210,11 @@ export function QuestionNode({
                     )}
 
                     <div className="nested-outcome-bottom">
-                      <span className="nested-outcome-cost-label">Cost</span>
+                      <span className="nested-outcome-cost-label">
+                        {isAdv ? 'Adv. Est.' : 'Cost'}
+                      </span>
                       <span className="nested-outcome-cost">
-                        +{formatCurrency(Number(o.data.cost) || 0, currency)}
+                        +{formatCurrency(displayCost, currency)}
                       </span>
                     </div>
 
@@ -181,21 +244,34 @@ export function QuestionNode({
         <span>
           {outcomeCount} OR branch{outcomeCount === 1 ? '' : 'es'}
         </span>
-        <button
-          type="button"
-          className="node-inline-btn nodrag"
-          onClick={(e) => {
-            e.stopPropagation();
-            addOutcomeForQuestion(id);
-          }}
-          title="Quickly add an Outcome branch to this question"
-        >
-          <MdiIcon path={mdiPlus} size={11} />
-          <span>Outcome</span>
-        </button>
+        <div className="node-footer-btns">
+          <button
+            type="button"
+            className="node-inline-btn nodrag"
+            onClick={(e) => {
+              e.stopPropagation();
+              addOutcomeForQuestion(id, false);
+            }}
+            title="Add a standard Outcome branch to this question"
+          >
+            <MdiIcon path={mdiPlus} size={11} />
+            <span>Outcome</span>
+          </button>
+          <button
+            type="button"
+            className="node-inline-btn nodrag is-adv-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              addOutcomeForQuestion(id, true);
+            }}
+            title="Add an Advanced Outcome branch (multi-pot, Low/Med/High, formulas, Capex/Opex)"
+          >
+            <MdiIcon path={mdiLayersTripleOutline} size={10} />
+            <span>Adv</span>
+          </button>
+        </div>
       </div>
 
-      {/* Default source handle (no id) for aggregate Question -> Question / Question -> End (and Question -> Outcome in Separate mode) */}
       <Handle
         type="source"
         position={Position.Right}

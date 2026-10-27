@@ -12,7 +12,10 @@ import {
   mdiContentCut,
   mdiContentDuplicate,
   mdiContentPaste,
+  mdiFunctionVariant,
   mdiHelpRhombusOutline,
+  mdiLayersTripleOutline,
+  mdiNoteTextOutline,
   mdiSelectAll,
   mdiSourceBranch,
   mdiTrashCanOutline,
@@ -27,24 +30,41 @@ import {
   SelectionMode,
   useReactFlow,
   useUpdateNodeInternals,
+  type EdgeTypes,
   type IsValidConnection,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useModelStore } from '../../store/modelStore';
-import type { ModelEdge, ModelNode, ModelNodeType } from '../../types/model';
+import {
+  isOutcomeNodeType,
+  type ModelEdge,
+  type ModelNode,
+  type ModelNodeType,
+} from '../../types/model';
 import { canConnectNodes } from '../../sim/validate';
 import { StartNode } from '../nodes/StartNode';
 import { QuestionNode } from '../nodes/QuestionNode';
 import { OutcomeNode } from '../nodes/OutcomeNode';
+import { AdvancedOutcomeNode } from '../nodes/AdvancedOutcomeNode';
+import { VariableNode } from '../nodes/VariableNode';
+import { NoteNode } from '../nodes/NoteNode';
 import { EndNode } from '../nodes/EndNode';
+import { NoteEdge } from '../edges/NoteEdge';
 import { MdiIcon } from '../MdiIcon';
 
 const nodeTypes: NodeTypes = {
   start: StartNode,
   question: QuestionNode,
   outcome: OutcomeNode,
+  'advanced-outcome': AdvancedOutcomeNode,
+  variable: VariableNode,
+  note: NoteNode,
   end: EndNode,
+};
+
+const edgeTypes: EdgeTypes = {
+  'note-edge': NoteEdge,
 };
 
 interface ContextMenuState {
@@ -82,7 +102,6 @@ function FlowCanvasInner() {
   const connectionError = useModelStore((s) => s.connectionError);
   const clearConnectionError = useModelStore((s) => s.clearConnectionError);
 
-  // Map each parented outcomeId -> parentQuestionId
   const parentQuestionByOutcome = useMemo(() => {
     const map = new Map<string, string>();
     for (const e of edges) {
@@ -93,12 +112,12 @@ function FlowCanvasInner() {
     return map;
   }, [edges]);
 
-  // Project nodes & edges when in 'nested' mode so parented outcomes are hidden on canvas
-  // and their outgoing links originate from their embedded handle (`outcome:<id>`) on the Question card.
   const displayNodes = useMemo<ModelNode[]>(() => {
-    if (outcomeDisplayMode !== 'nested') return nodes;
+    if (outcomeDisplayMode !== 'nested') {
+      return nodes.map((n) => (n.hidden ? { ...n, hidden: false } : n));
+    }
     return nodes.map((n) => {
-      if (n.type === 'outcome' && parentQuestionByOutcome.has(n.id)) {
+      if (isOutcomeNodeType(n.type) && parentQuestionByOutcome.has(n.id)) {
         return { ...n, hidden: true };
       }
       return n.hidden ? { ...n, hidden: false } : n;
@@ -116,13 +135,23 @@ function FlowCanvasInner() {
       ) {
         return { ...e, hidden: true };
       }
+      if (e.data?.kind === 'note-link') {
+        const mappedSource = parentQuestionByOutcome.get(e.source) ?? e.source;
+        const mappedTarget = parentQuestionByOutcome.get(e.target) ?? e.target;
+        return {
+          ...e,
+          hidden: false,
+          source: mappedSource,
+          target: mappedTarget,
+        };
+      }
       const parentQId = parentQuestionByOutcome.get(e.source);
       if (parentQId) {
         const srcOutcome = nodes.find(
-          (n) => n.id === e.source && n.type === 'outcome'
+          (n) => n.id === e.source && isOutcomeNodeType(n.type)
         );
         const probLabel =
-          srcOutcome && srcOutcome.type === 'outcome'
+          srcOutcome && isOutcomeNodeType(srcOutcome.type)
             ? `${srcOutcome.data.probabilityPct}%`
             : e.label;
         return {
@@ -143,7 +172,6 @@ function FlowCanvasInner() {
     });
   }, [edges, nodes, outcomeDisplayMode, parentQuestionByOutcome]);
 
-  // Whenever display mode or question outcomes change, refresh ReactFlow handle positions
   useEffect(() => {
     const questionIds = nodes
       .filter((n) => n.type === 'question')
@@ -171,7 +199,6 @@ function FlowCanvasInner() {
     return () => window.clearTimeout(timer);
   }, [layoutVersion, fitView]);
 
-  // Global keyboard shortcuts for Copy / Cut / Paste / Duplicate / Select All
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -353,6 +380,7 @@ function FlowCanvasInner() {
         nodes={displayNodes}
         edges={displayEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -401,6 +429,9 @@ function FlowCanvasInner() {
             if (node.type === 'start') return '#1d5c4b';
             if (node.type === 'question') return '#181715';
             if (node.type === 'outcome') return '#224b7a';
+            if (node.type === 'advanced-outcome') return '#c44528';
+            if (node.type === 'variable') return '#a66a12';
+            if (node.type === 'note') return '#b5a88f';
             return '#8c8578';
           }}
         />
@@ -410,8 +441,8 @@ function FlowCanvasInner() {
         <div
           className="canvas-context-menu"
           style={{
-            left: Math.min(window.innerWidth - 220, contextMenu.clientX),
-            top: Math.min(window.innerHeight - 260, contextMenu.clientY),
+            left: Math.min(window.innerWidth - 230, contextMenu.clientX),
+            top: Math.min(window.innerHeight - 310, contextMenu.clientY),
           }}
           role="menu"
         >
@@ -527,6 +558,54 @@ function FlowCanvasInner() {
                 <span className="context-item-label">
                   <MdiIcon path={mdiSourceBranch} size={14} />
                   <span>Add Outcome Here</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => {
+                  addNode('advanced-outcome', {
+                    x: contextMenu.flowX,
+                    y: contextMenu.flowY,
+                  });
+                  setContextMenu(null);
+                }}
+              >
+                <span className="context-item-label">
+                  <MdiIcon path={mdiLayersTripleOutline} size={14} />
+                  <span>Add Advanced Outcome Here</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => {
+                  addNode('variable', {
+                    x: contextMenu.flowX,
+                    y: contextMenu.flowY,
+                  });
+                  setContextMenu(null);
+                }}
+              >
+                <span className="context-item-label">
+                  <MdiIcon path={mdiFunctionVariant} size={14} />
+                  <span>Add Variable Here</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => {
+                  addNode('note', {
+                    x: contextMenu.flowX,
+                    y: contextMenu.flowY,
+                  });
+                  setContextMenu(null);
+                }}
+              >
+                <span className="context-item-label">
+                  <MdiIcon path={mdiNoteTextOutline} size={14} />
+                  <span>Add Note Here</span>
                 </span>
               </button>
               <button

@@ -6,6 +6,7 @@ import {
   mdiCheckDecagramOutline,
   mdiDownloadOutline,
   mdiFileChartOutline,
+  mdiFileDelimitedOutline,
   mdiFileDocumentPlusOutline,
   mdiFileTreeOutline,
   mdiFlaskOutline,
@@ -23,11 +24,13 @@ import {
   type LayoutAlgorithm,
 } from '../types/model';
 import { downloadSimulationReport } from '../sim/reportGenerator';
+import { CsvImportModal } from './CsvImportModal';
 import { MdiIcon } from './MdiIcon';
 
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [csvOpen, setCsvOpen] = useState(false);
 
   const modelName = useModelStore((s) => s.modelName);
   const setModelName = useModelStore((s) => s.setModelName);
@@ -49,6 +52,7 @@ export function Toolbar() {
   const loadDemoModel = useModelStore((s) => s.loadDemoModel);
   const exportModelJson = useModelStore((s) => s.exportModelJson);
   const importModelJson = useModelStore((s) => s.importModelJson);
+  const importCsvChain = useModelStore((s) => s.importCsvChain);
 
   const handleExport = () => {
     const json = exportModelJson();
@@ -237,6 +241,15 @@ export function Toolbar() {
         <button
           type="button"
           className="btn btn-ghost btn-with-icon"
+          onClick={() => setCsvOpen(true)}
+          title="Import a Yes/No question chain from CSV (item, cost, chance)"
+        >
+          <MdiIcon path={mdiFileDelimitedOutline} size={14} />
+          <span>CSV Chain</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-with-icon"
           onClick={resetToNewModel}
           title="Start a new model"
         >
@@ -308,6 +321,14 @@ export function Toolbar() {
             Dismiss
           </button>
         </div>
+      )}
+
+      {csvOpen && (
+        <CsvImportModal
+          currency={currency}
+          onClose={() => setCsvOpen(false)}
+          onImport={(rows, mode) => importCsvChain(rows, mode)}
+        />
       )}
     </header>
   );

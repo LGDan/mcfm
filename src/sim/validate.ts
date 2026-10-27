@@ -1,26 +1,53 @@
-import type {
-  EdgeKind,
-  ModelEdge,
-  ModelNode,
-  ModelNodeType,
-  OutcomeFlowNode,
-  ValidationIssue,
-  ValidationResult,
+import {
+  isOutcomeNodeType,
+  type AdvancedOutcomeFlowNode,
+  type AnyOutcomeFlowNode,
+  type EdgeKind,
+  type ModelEdge,
+  type ModelNode,
+  type ModelNodeType,
+  type ValidationIssue,
+  type ValidationResult,
+  type VariableFlowNode,
 } from '../types/model';
+import { validateFormulaExpression } from './formulaEvaluator';
 
 const PROB_TOLERANCE = 0.05;
+
+function isDagNodeType(type: ModelNodeType | undefined): boolean {
+  return (
+    type === 'start' ||
+    type === 'question' ||
+    isOutcomeNodeType(type) ||
+    type === 'end'
+  );
+}
 
 export function inferEdgeKind(
   sourceType: ModelNodeType | undefined,
   targetType: ModelNodeType | undefined
 ): EdgeKind | null {
   if (!sourceType || !targetType) return null;
-  if (sourceType === 'start' && targetType === 'question') return 'start-to-question';
-  if (sourceType === 'question' && targetType === 'outcome') return 'question-to-outcome';
-  if (sourceType === 'question' && targetType === 'question') return 'question-to-question';
-  if (sourceType === 'question' && targetType === 'end') return 'question-to-end';
-  if (sourceType === 'outcome' && targetType === 'question') return 'outcome-to-question';
-  if (sourceType === 'outcome' && targetType === 'end') return 'outcome-to-end';
+  if (sourceType === 'note' || targetType === 'note') return 'note-link';
+  if (sourceType === 'variable' || targetType === 'variable') return null;
+  if (sourceType === 'start' && targetType === 'question') {
+    return 'start-to-question';
+  }
+  if (sourceType === 'question' && isOutcomeNodeType(targetType)) {
+    return 'question-to-outcome';
+  }
+  if (sourceType === 'question' && targetType === 'question') {
+    return 'question-to-question';
+  }
+  if (sourceType === 'question' && targetType === 'end') {
+    return 'question-to-end';
+  }
+  if (isOutcomeNodeType(sourceType) && targetType === 'question') {
+    return 'outcome-to-question';
+  }
+  if (isOutcomeNodeType(sourceType) && targetType === 'end') {
+    return 'outcome-to-end';
+  }
   return null;
 }
 
@@ -50,7 +77,9 @@ export function isQuestionOutputBlocked(
 ): boolean {
   const childOutcomeIds = new Set(getQuestionChildOutcomeIds(questionId, edges));
   if (childOutcomeIds.size === 0) return false;
-  return edges.some((e) => childOutcomeIds.has(e.source));
+  return edges.some(
+    (e) => childOutcomeIds.has(e.source) && e.data?.kind !== 'note-link'
+  );
 }
 
 /**
@@ -82,18 +111,15 @@ export function wouldCreateCycle(
   targetId: string
 ): boolean {
   if (sourceId === targetId) return true;
-  const nodeMap = new Map<string, ModelNode>();
   const adj = new Map<string, string[]>();
   for (const n of nodes) {
-    nodeMap.set(n.id, n);
     adj.set(n.id, []);
   }
   for (const e of edges) {
+    if (e.data?.kind === 'note-link') continue;
     adj.get(e.source)?.push(e.target);
   }
 
-  // Also treat child outcomes as reaching whatever their parent question reaches and vice versa
-  // Check if sourceId is reachable from targetId
   const visited = new Set<string>();
   const stack = [targetId];
   while (stack.length > 0) {
@@ -134,16 +160,18 @@ export function canConnectNodes(
   if (!kind) {
     return {
       allowed: false,
-      reason: `Cannot link ${sourceNode.type} → ${targetNode.type}. Allowed: Start→Question, Question→Outcome, Question→Question, Question→End, Outcome→Question, Outcome→End.`,
+      reason: `Cannot link ${sourceNode.type} → ${targetNode.type}. Allowed: Start→Question, Question→Outcome/Advanced Outcome, Question→Question, Question→End, Outcome→Question, Outcome→End, and Note↔any.`,
     };
   }
 
-  // Prevent duplicate edge between same pair
   if (edges.some((e) => e.source === sourceId && e.target === targetId)) {
     return { allowed: false, reason: 'Connection already exists.' };
   }
 
-  // Mutual exclusion between Question aggregate output and individual Outcome outputs
+  if (kind === 'note-link') {
+    return { allowed: true, kind };
+  }
+
   if (kind === 'question-to-question' || kind === 'question-to-end') {
     if (isQuestionOutputBlocked(sourceId, edges)) {
       return {
@@ -164,9 +192,10 @@ export function canConnectNodes(
     }
   }
 
-  // Every outcome can have at most ONE incoming edge (from its parent question)
-  if (targetNode.type === 'outcome') {
-    const existingParent = edges.find((e) => e.target === targetId);
+  if (isOutcomeNodeType(targetNode.type)) {
+    const existingParent = edges.find(
+      (e) => e.target === targetId && e.data?.kind !== 'note-link'
+    );
     if (existingParent) {
       return {
         allowed: false,
@@ -175,7 +204,6 @@ export function canConnectNodes(
     }
   }
 
-  // Cycle check
   if (wouldCreateCycle(nodes, edges, sourceId, targetId)) {
     return {
       allowed: false,
@@ -186,16 +214,20 @@ export function canConnectNodes(
   return { allowed: true, kind };
 }
 
-export function detectCyclesInGraph(nodes: ModelNode[], edges: ModelEdge[]): boolean {
+export function detectCyclesInGraph(
+  nodes: ModelNode[],
+  edges: ModelEdge[]
+): boolean {
   const adj = new Map<string, string[]>();
   for (const n of nodes) adj.set(n.id, []);
   for (const e of edges) {
+    if (e.data?.kind === 'note-link') continue;
     if (adj.has(e.source) && adj.has(e.target)) {
       adj.get(e.source)!.push(e.target);
     }
   }
 
-  const state = new Map<string, 0 | 1 | 2>(); // 0 unvisited, 1 visiting, 2 visited
+  const state = new Map<string, 0 | 1 | 2>();
   for (const n of nodes) state.set(n.id, 0);
 
   const dfs = (u: string): boolean => {
@@ -210,6 +242,7 @@ export function detectCyclesInGraph(nodes: ModelNode[], edges: ModelEdge[]): boo
   };
 
   for (const n of nodes) {
+    if (!isDagNodeType(n.type as ModelNodeType)) continue;
     if (state.get(n.id) === 0) {
       if (dfs(n.id)) return true;
     }
@@ -217,7 +250,10 @@ export function detectCyclesInGraph(nodes: ModelNode[], edges: ModelEdge[]): boo
   return false;
 }
 
-export function validateModel(nodes: ModelNode[], edges: ModelEdge[]): ValidationResult {
+export function validateModel(
+  nodes: ModelNode[],
+  edges: ModelEdge[]
+): ValidationResult {
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
   const questionProbSums: Record<string, number> = {};
@@ -245,14 +281,15 @@ export function validateModel(nodes: ModelNode[], edges: ModelEdge[]): Validatio
     errors.push({
       id: 'cycle-detected',
       severity: 'error',
-      message: 'Graph contains a cycle. Decision model must be a Directed Acyclic Graph (DAG).',
+      message:
+        'Graph contains a cycle. Decision model must be a Directed Acyclic Graph (DAG).',
     });
   }
 
-  // Compute reachability from Start node(s)
   const adj = new Map<string, string[]>();
   for (const n of nodes) adj.set(n.id, []);
   for (const e of edges) {
+    if (e.data?.kind === 'note-link') continue;
     adj.get(e.source)?.push(e.target);
   }
 
@@ -269,7 +306,9 @@ export function validateModel(nodes: ModelNode[], edges: ModelEdge[]): Validatio
 
   if (startNodes.length === 1) {
     const startId = startNodes[0].id;
-    const startOutgoing = edges.filter((e) => e.source === startId);
+    const startOutgoing = edges.filter(
+      (e) => e.source === startId && e.data?.kind !== 'note-link'
+    );
     if (startOutgoing.length === 0) {
       errors.push({
         id: 'start-disconnected',
@@ -280,22 +319,74 @@ export function validateModel(nodes: ModelNode[], edges: ModelEdge[]): Validatio
     }
   }
 
-  // Check each question's outcomes & probabilities
+  const availableVariables = new Set<string>();
+  const seenVariableNames = new Map<string, string>();
+  for (const node of nodes) {
+    if (node.type !== 'variable') continue;
+    const vNode = node as VariableFlowNode;
+    const name = (vNode.data.name || '').trim().toLowerCase();
+    if (!name) {
+      errors.push({
+        id: `var-empty-name-${node.id}`,
+        severity: 'error',
+        nodeId: node.id,
+        message: `Variable "${vNode.data.label || node.id}" is missing an identifier.`,
+      });
+      continue;
+    }
+    if (!/^[a-z_][a-z0-9_]*$/.test(name)) {
+      errors.push({
+        id: `var-bad-name-${node.id}`,
+        severity: 'error',
+        nodeId: node.id,
+        message: `Variable identifier "${name}" must match [a-zA-Z_][a-zA-Z0-9_]*.`,
+      });
+    }
+    const existing = seenVariableNames.get(name);
+    if (existing) {
+      errors.push({
+        id: `var-dup-${node.id}`,
+        severity: 'error',
+        nodeId: node.id,
+        message: `Variable identifier "${name}" is already used by another Variable node.`,
+      });
+    } else {
+      seenVariableNames.set(name, node.id);
+      availableVariables.add(name);
+    }
+
+    if (
+      vNode.data.mode !== 'fixed' &&
+      Number(vNode.data.minValue) > Number(vNode.data.maxValue)
+    ) {
+      errors.push({
+        id: `var-bounds-${node.id}`,
+        severity: 'error',
+        nodeId: node.id,
+        message: `Variable "${name}" minimum (${vNode.data.minValue}) is greater than maximum (${vNode.data.maxValue}).`,
+      });
+    }
+  }
+
   for (const node of nodes) {
     if (node.type === 'question') {
-      const outcomeEdges = edges.filter((e) => {
-        const target = nodeMap.get(e.target);
-        return e.source === node.id && target?.type === 'outcome';
-      });
+      const outcomeEdges = edges.filter(
+        (e) => e.source === node.id && e.data?.kind === 'question-to-outcome'
+      );
       const outcomes = outcomeEdges
-        .map((e) => nodeMap.get(e.target) as OutcomeFlowNode | undefined)
-        .filter((n): n is OutcomeFlowNode => Boolean(n));
+        .map((e) => nodeMap.get(e.target))
+        .filter(
+          (n): n is AnyOutcomeFlowNode =>
+            n != null && isOutcomeNodeType(n.type)
+        );
 
-      const sum = outcomes.reduce((acc, o) => acc + (Number(o.data.probabilityPct) || 0), 0);
+      const sum = outcomes.reduce(
+        (acc, o) => acc + (Number(o.data.probabilityPct) || 0),
+        0
+      );
       questionProbSums[node.id] = Math.round(sum * 100) / 100;
       questionOutcomeCounts[node.id] = outcomes.length;
 
-      // Check mutual exclusion of Question-level output vs Outcome-level output
       const hasAggregateOut = edges.some(
         (e) =>
           e.source === node.id &&
@@ -309,6 +400,16 @@ export function validateModel(nodes: ModelNode[], edges: ModelEdge[]): Validatio
           severity: 'error',
           nodeId: node.id,
           message: `Question "${node.data.label}" cannot use both its Question output connector and individual Outcome output connectors simultaneously.`,
+        });
+      }
+
+      const impactYear = Number(node.data.impactYear) || 1;
+      if (node.data.impactYearEnabled && (impactYear < 1 || impactYear > 10)) {
+        errors.push({
+          id: `q-year-${node.id}`,
+          severity: 'error',
+          nodeId: node.id,
+          message: `Question "${node.data.label}" Impact Year must be between 1 and 10.`,
         });
       }
 
@@ -348,50 +449,120 @@ export function validateModel(nodes: ModelNode[], edges: ModelEdge[]): Validatio
           message: `Question "${node.data.label}" is not reachable from Start.`,
         });
       }
-    } else if (node.type === 'outcome') {
-      const incoming = edges.filter((e) => e.target === node.id);
+    } else if (isOutcomeNodeType(node.type)) {
+      const outcomeNode = node as AnyOutcomeFlowNode;
+      const incoming = edges.filter(
+        (e) => e.target === node.id && e.data?.kind !== 'note-link'
+      );
+      const label = String(outcomeNode.data.label || 'Outcome');
       if (incoming.length === 0) {
         warnings.push({
           id: `orphan-outcome-${node.id}`,
           severity: 'warning',
           nodeId: node.id,
-          message: `Outcome "${node.data.label}" is not connected to any parent Question.`,
+          message: `Outcome "${label}" is not connected to any parent Question.`,
         });
       } else if (incoming.length > 1) {
         errors.push({
           id: `multi-parent-outcome-${node.id}`,
           severity: 'error',
           nodeId: node.id,
-          message: `Outcome "${node.data.label}" has multiple incoming edges (must have exactly 1 parent Question).`,
+          message: `Outcome "${label}" has multiple incoming edges (must have exactly 1 parent Question).`,
         });
       }
-      if (node.data.cost < 0) {
-        errors.push({
-          id: `neg-cost-${node.id}`,
-          severity: 'error',
-          nodeId: node.id,
-          message: `Outcome "${node.data.label}" has a negative cost.`,
-        });
-      }
+
+      const probabilityPct = Number(outcomeNode.data.probabilityPct);
       if (
-        node.data.probabilityPct < 0 ||
-        node.data.probabilityPct > 100 ||
-        Number.isNaN(node.data.probabilityPct)
+        probabilityPct < 0 ||
+        probabilityPct > 100 ||
+        Number.isNaN(probabilityPct)
       ) {
         errors.push({
           id: `invalid-prob-${node.id}`,
           severity: 'error',
           nodeId: node.id,
-          message: `Outcome "${node.data.label}" probability must be between 0% and 100%.`,
+          message: `Outcome "${label}" probability must be between 0% and 100%.`,
         });
-      } else if (node.data.probabilityPct === 0 && reachableNodeIds.has(node.id)) {
+      } else if (probabilityPct === 0 && reachableNodeIds.has(node.id)) {
         warnings.push({
           id: `zero-prob-${node.id}`,
           severity: 'warning',
           nodeId: node.id,
-          message: `Outcome "${node.data.label}" has 0% probability and will never be sampled.`,
+          message: `Outcome "${label}" has 0% probability and will never be sampled.`,
         });
       }
+
+      if (node.type === 'outcome' && Number(node.data.cost) < 0) {
+        errors.push({
+          id: `neg-cost-${node.id}`,
+          severity: 'error',
+          nodeId: node.id,
+          message: `Outcome "${label}" has a negative cost.`,
+        });
+      }
+
+      if (node.type === 'advanced-outcome') {
+        const adv = node as AdvancedOutcomeFlowNode;
+        const pots = adv.data.pots ?? [];
+        if (pots.length === 0) {
+          warnings.push({
+            id: `adv-no-pots-${node.id}`,
+            severity: 'warning',
+            nodeId: node.id,
+            message: `Advanced Outcome "${label}" has no cost pots allocated.`,
+          });
+        }
+        for (const pot of pots) {
+          if (pot.estimateMode === 'three-point') {
+            const low = Number(pot.lowCost) || 0;
+            const med = Number(pot.mediumCost) || 0;
+            const high = Number(pot.highCost) || 0;
+            if (low > med || med > high) {
+              errors.push({
+                id: `adv-lmh-${node.id}-${pot.potId}`,
+                severity: 'error',
+                nodeId: node.id,
+                message: `Advanced Outcome "${label}" pot "${pot.label}" must satisfy Low ≤ Medium ≤ High.`,
+              });
+            }
+          } else if (pot.estimateMode === 'formula') {
+            const check = validateFormulaExpression(
+              pot.formula || '',
+              availableVariables
+            );
+            if (!check.valid) {
+              errors.push({
+                id: `adv-formula-${node.id}-${pot.potId}`,
+                severity: 'error',
+                nodeId: node.id,
+                message: `Advanced Outcome "${label}" pot "${pot.label}": ${check.error}`,
+              });
+            }
+          }
+        }
+        if (
+          adv.data.capexOpexEnabled &&
+          (Number(adv.data.opexAnnualCost) || 0) < 0
+        ) {
+          errors.push({
+            id: `adv-opex-neg-${node.id}`,
+            severity: 'error',
+            nodeId: node.id,
+            message: `Advanced Outcome "${label}" has a negative annual Opex cost.`,
+          });
+        }
+      }
+    } else if (
+      node.type === 'end' &&
+      !reachableNodeIds.has(node.id) &&
+      edges.some((e) => e.target === node.id && e.data?.kind !== 'note-link')
+    ) {
+      warnings.push({
+        id: `unreach-end-${node.id}`,
+        severity: 'warning',
+        nodeId: node.id,
+        message: `End node is not reachable from Start.`,
+      });
     }
   }
 
